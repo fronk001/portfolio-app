@@ -1,0 +1,6 @@
+# Nothing personal lives in this folder: the figures come from Firebase, or on
+# the laptop from the tracker's own folder (tools/serve.py, ?local).
+dist/
+__pycache__/
+screenshots/
+.claude/

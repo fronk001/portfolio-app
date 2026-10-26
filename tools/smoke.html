@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<!-- UI smoke test: taps through the real app on the demo figures — every
+     range, every metric and return method, Custom dates, the benchmark
+     choice, the Holdings screen and a holding — and checks each draws a
+     chart (or says why not) without an error.
+     Run with: py tools/run_tests.py tools/smoke.html -->
+<html lang="en">
+<head><meta charset="utf-8"><title>Smoke test</title></head>
+<body>
+<pre id="out">running…</pre>
+<iframe id="f" title="app" style="width:390px;height:1400px;border:0"></iframe>
+<script type="module">
+const f = document.getElementById('f');
+const log = [];
+const check = (name, cond) => log.push({ name, ok: !!cond });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(fn, what, ms = 8000) {
+  for (const t = Date.now(); Date.now() - t < ms; await sleep(30)) {
+    const v = fn();
+    if (v) return v;
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+let done = false;
+(async () => { while (!done) await fetch('/__wait').catch(() => {}); })();
+
+const errors = [];
+const doc = () => f.contentDocument;
+const tap = (act, v) => {
+  const el = doc().querySelector(`[data-act="${act}"]${v ? `[data-v="${v}"]` : ''}`);
+  if (!el) throw new Error(`no ${act} ${v || ''} to tap`);
+  el.click();
+};
+const drawn = () => {
+  const path = doc().querySelector('.chart-box svg path');
+  return path && path.getAttribute('d').length > 20 && doc().querySelector('.readout').textContent.trim();
+};
+const chartOrReason = () => drawn() || (doc().querySelector('.chart-card .empty') || {}).textContent;
+
+try {
+  await new Promise((r) => { f.addEventListener('load', r, { once: true }); f.src = '../src/index.html?demo'; });
+  f.contentWindow.addEventListener('error', (e) => errors.push(e.message));
+  f.contentWindow.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
+  await until(drawn, 'the first chart');
+  check('it opens on 1W and on value', doc().querySelector('.pill.on[data-v="1W"]') && doc().querySelector('.pill.on[data-v="Value"]'));
+
+  for (const metric of ['Value', 'Return %', 'Total P&L']) {
+    tap('metric', metric);
+    for (const range of ['1W', '1M', '3M', '6M', 'YTD', '1Y', '3Y', 'All']) {
+      tap('range', range);
+      if (metric !== 'Return %') {
+        check(`${metric} over ${range} draws`, drawn());
+        continue;
+      }
+      for (const method of ['Simple %', 'Time %', 'Money %']) {
+        tap('method', method);
+        check(`${method} over ${range} draws or says why not`, chartOrReason());
+      }
+    }
+  }
+
+  tap('metric', 'Return %');
+  tap('method', 'Time %');
+  tap('range', 'Custom');
+  const from = await until(() => doc().querySelector('[data-act="custom-from"]'), 'the date fields');
+  check('Custom offers two dates', from && doc().querySelector('[data-act="custom-to"]'));
+  from.value = '2024-03-01';
+  from.dispatchEvent(new Event('change', { bubbles: true }));
+  check('a custom range draws, named by its dates', drawn() && /Fri 1 Mar 2024|1 Mar 2024/.test(doc().querySelector('.chart-card').textContent));
+  tap('method', 'Money %');
+  check('Money % on a custom range says why it is not drawn', /fixed ranges/.test(chartOrReason()));
+
+  tap('method', 'Simple %');
+  const select = doc().querySelector('[data-act="bench"]');
+  select.value = 'AEX';
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+  check('a different benchmark is drawn beside the portfolio', doc().querySelectorAll('.chart-box svg path').length === 2 && /AEX/.test(doc().querySelector('.readout').textContent));
+
+  // A finger on the chart reads that day off it.
+  const svg = doc().querySelector('.chart-box svg');
+  const box = svg.getBoundingClientRect();
+  const before = doc().querySelector('.readout').textContent;
+  svg.dispatchEvent(new f.contentWindow.PointerEvent('pointerdown', { clientX: box.left + 40, clientY: box.top + 50, bubbles: true, pointerType: 'touch' }));
+  check('touching the chart reads out an earlier day', doc().querySelector('.readout').textContent !== before);
+
+  f.contentWindow.location.hash = '#/holdings';
+  await until(() => doc().querySelector('.holdings'), 'the holdings');
+  const rows = doc().querySelectorAll('.hrow');
+  check(`every holding is listed (${rows.length})`, rows.length === 8);
+  rows[0].click();
+  check('a holding opens to its details', doc().querySelector('.holding.open .detail') && /Average cost/.test(doc().querySelector('.detail').textContent));
+  check('the facts say where the figures come from', /Made-up figures/.test(doc().querySelector('.facts').textContent));
+} catch (e) {
+  log.push({ name: e.message, ok: false });
+}
+check(`no errors in the app${errors.length ? `: ${errors.join('; ')}` : ''}`, !errors.length);
+
+done = true;
+const failed = log.filter((x) => !x.ok);
+document.getElementById('out').textContent = `${failed.length ? 'FAIL' : 'PASS'} ${log.length - failed.length}/${log.length}\n` +
+  failed.map((x) => `✗ ${x.name}`).join('\n');
+</script>
+</body>
+</html>

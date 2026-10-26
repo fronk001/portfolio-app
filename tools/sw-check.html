@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<!-- Checks the published copy's offline copy (dist/, sw.js): it installs with
+     every file, the dev copy in src/ never installs one, and — the point of
+     it all — with the server out of reach the real app opens from the phone's
+     copy and draws the figures it kept. Build first:
+       py tools/build.py
+       py tools/run_tests.py tools/sw-check.html -->
+<html lang="en">
+<head><meta charset="utf-8"><title>Offline copy check</title></head>
+<body>
+<pre id="out">running…</pre>
+<iframe id="f" title="app" style="width:390px;height:1000px;border:0"></iframe>
+<script type="module">
+import * as cache from '../src/data/cache.js';
+import { DEMO } from '../src/data/demo.js';
+import { eur } from '../src/core/format.js';
+
+const f = document.getElementById('f');
+const log = [];
+const check = (name, cond) => log.push({ name, ok: !!cond });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(fn, what, ms = 8000) {
+  for (const t = Date.now(); Date.now() - t < ms; await sleep(50)) {
+    const v = await fn();
+    if (v) return v;
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+const go = (url) => new Promise((r) => { f.addEventListener('load', r, { once: true }); f.src = url; });
+const drawn = () => until(() => f.contentDocument && f.contentDocument.querySelector('.hero .big'), 'the figures');
+const reachable = (url) => fetch(url, { cache: 'no-store' }).then((r) => r.ok, () => false);
+let done = false;
+(async () => { while (!done) await fetch('/__wait').catch(() => {}); })();
+
+try {
+  const html = await fetch('/dist/index.html', { cache: 'no-store' }).then((r) => (r.ok ? r.text() : ''));
+  if (!html) throw new Error('no dist/ — run py tools/build.py first');
+  const version = (html.match(/name="app-version" content="([^"]+)"/) || [])[1];
+  check('the published page carries a version', version && version !== 'dev');
+  const manifest = await fetch('/dist/manifest.webmanifest').then((r) => r.json());
+  const icons = await Promise.all(manifest.icons.map((i) => reachable(`/dist/${i.src}`)));
+  check('the manifest reads, and its icons exist', manifest.display === 'standalone' && icons.every(Boolean));
+  check('the iPhone icon exists', await reachable('/dist/icons/apple-touch-icon.png'));
+
+  // The dev copy: no service worker, ever.
+  await go('../src/index.html?demo');
+  await drawn();
+  await sleep(300);
+  check('src/ registers no offline copy', (await navigator.serviceWorker.getRegistrations()).length === 0);
+
+  // First visit to the published copy: it draws, and the offline copy installs and takes over.
+  await go('../dist/index.html?demo');
+  await drawn();
+  await until(() => f.contentWindow.navigator.serviceWorker.controller, 'the offline copy to take over');
+  await sleep(300);
+  const regs = await navigator.serviceWorker.getRegistrations();
+  check('dist/ registers one offline copy, for dist/ only', regs.length === 1 && regs[0].scope.endsWith('/dist/'));
+  const sw = await fetch('/dist/sw.js', { cache: 'no-store' }).then((r) => r.text());
+  const files = JSON.parse(sw.match(/const FILES = (\[[\s\S]*?\]);/)[1]);
+  const kept = await caches.open(`portfolio-${version}`);
+  const missing = [];
+  for (const file of files) if (!(await kept.match(new URL(file, `${location.origin}/dist/`).href))) missing.push(file);
+  check(`every file is kept on the device (${files.length})${missing.length ? `; missing ${missing.join(', ')}` : ''}`,
+    files.length > 15 && !missing.length);
+  check('the list covers the app and the fonts, not the demo', ['./', 'index.html', 'ui/app.js', 'core/figures.js', 'fonts/fraunces-latin.woff2'].every((x) => files.includes(x)) && !files.includes('data/demo.js'));
+
+  // The phone's real situation: figures kept on the device, server out of reach.
+  const raw = { main: { json: JSON.stringify(DEMO.main) }, series: { json: JSON.stringify(DEMO.series) } };
+  await cache.put('v1', { owner: 'check', docs: raw, savedAt: new Date().toISOString() });
+  await fetch('/__offline?on');
+  check('the published copy really is out of reach', !(await reachable('/dist/app.css')));
+  await go('../dist/index.html');
+  await drawn();
+  const doc = f.contentDocument;
+  check('offline, the app opens and draws the figures it kept', doc.querySelector('.hero .big').textContent === eur(DEMO.main.header.total_value_eur));
+  await until(() => doc.querySelector('.chart-box svg path'), 'the chart').catch(() => {});
+  check('offline, the chart draws too', !!doc.querySelector('.chart-box svg path'));
+  const faces = () => [...doc.fonts].filter((x) => x.status === 'loaded').map((x) => x.family.replace(/"/g, ''));
+  await until(() => faces().includes('Fraunces'), 'the fonts').catch(() => {});
+  check(`offline, the fonts come from the copy (${faces().join(', ') || 'none'})`,
+    faces().includes('Fraunces') && ![...doc.fonts].some((x) => x.status === 'error'));
+  await fetch('/__offline?off');
+} catch (e) {
+  log.push({ name: e.message, ok: false });
+  await fetch('/__offline?off');
+}
+
+await cache.clear().catch(() => {});
+for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+done = true;
+const failed = log.filter((x) => !x.ok);
+document.getElementById('out').textContent = `${failed.length ? 'FAIL' : 'PASS'} ${log.length - failed.length}/${log.length}\n` +
+  failed.map((x) => `✗ ${x.name}`).join('\n');
+</script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!-- Checks the real Firebase SDK against src/data/firebase.js without any
+     account: the CDN modules load under the app's own name, auth starts
+     signed out, and listening to the portfolio folder sets up. Nothing is
+     written: this app never writes. Needs an internet connection.
+     Run with: py tools/run_tests.py tools/firebase-check.html -->
+<html lang="en">
+<head><meta charset="utf-8"><title>Firebase check</title></head>
+<body>
+<pre id="out">running…</pre>
+<script type="module">
+import { firebaseBackend } from '../src/data/firebase.js';
+
+const log = [];
+const check = (name, cond) => log.push({ name, ok: !!cond });
+let done = false;
+(async () => { while (!done) await fetch('/__wait').catch(() => {}); })();
+
+try {
+  // A made-up project: nothing here talks to a real database.
+  const b = firebaseBackend({ apiKey: 'check-only', projectId: 'portfolio-check', appId: '1:1:web:1' });
+  const user = await new Promise((r, no) => b.start(r).catch(no));
+  check('the SDK loads from the CDN and auth starts signed out', user === null);
+  let listenErr = null;
+  try { b.listen('check-uid', () => {}, () => {})(); } catch (e) { listenErr = e; }
+  check(`listening to the portfolio folder sets up${listenErr ? `: ${listenErr.message}` : ''}`, !listenErr);
+} catch (e) {
+  log.push({ name: e.message, ok: false });
+}
+
+done = true;
+const failed = log.filter((x) => !x.ok);
+document.getElementById('out').textContent = `${failed.length ? 'FAIL' : 'PASS'} ${log.length - failed.length}/${log.length}\n` +
+  failed.map((x) => `✗ ${x.name}`).join('\n');
+</script>
+</body>
+</html>

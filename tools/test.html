@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portfolio tests</title>
+<style>body{font:14px/1.5 system-ui,sans-serif;margin:24px}pre{white-space:pre-wrap}</style>
+</head>
+<body>
+<pre id="out">running…</pre>
+<script type="module">
+import { results, running } from '../tests/harness.js';
+
+// Headless Edge fast-forwards its clock whenever no request is open, and would
+// dump the page before IndexedDB answers (store.test.js); this keeps one open.
+let done = false;
+(async () => { while (!done) await fetch('/__wait').catch(() => {}); })();
+
+const files = ['figures', 'chart', 'contract', 'store'];
+for (const f of files) {
+  try {
+    await import(`../tests/${f}.test.js`);
+  } catch (e) {
+    results.push({ name: `loading ${f}.test.js`, ok: false, err: e.stack || e.message });
+  }
+}
+await Promise.all(running);
+done = true;
+const failed = results.filter((r) => !r.ok);
+document.getElementById('out').textContent =
+  `${failed.length ? 'FAIL' : 'PASS'} ${results.length - failed.length}/${results.length}\n` +
+  failed.map((r) => `✗ ${r.name}\n    ${r.err}`).join('\n');
+document.title = failed.length ? 'FAIL' : 'PASS';
+</script>
+</body>
+</html>
