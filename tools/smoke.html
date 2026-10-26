@@ -3,7 +3,8 @@
      range, every metric and return method, Custom dates, the benchmark
      choice, the Holdings screen and a holding, then each of the other six
      screens (a position's ranges and a sold one, the map, cash events, the
-     booked results) — and checks each draws (or says why not) without an
+     booked results), then the switch to Wealth and its three screens at
+     every window — and checks each draws (or says why not) without an
      error. Last, the same screens on figures from an engine run before they
      existed (?demo=old), which must each say so in a sentence.
      Run with: py tools/run_tests.py tools/smoke.html -->
@@ -13,6 +14,8 @@
 <pre id="out">running…</pre>
 <iframe id="f" title="app" style="width:390px;height:1400px;border:0"></iframe>
 <script type="module">
+import { DEMO } from '../src/data/demo.js';
+
 const f = document.getElementById('f');
 const log = [];
 const check = (name, cond) => log.push({ name, ok: !!cond });
@@ -156,15 +159,63 @@ try {
   booked[0].click();
   check('a booked position opens to its trades and fees', /First trade/.test(doc().querySelector('.holding.open .detail').textContent));
 
+  // Wealth: one tap from any Portfolio screen, its three screens, every window.
+  const facades = () => [...doc().querySelectorAll('.facades a')];
+  check('the switch at the top offers Portfolio and Wealth, Portfolio on', facades().map((a) => a.textContent.trim()).join() === 'Portfolio,Wealth' && doc().querySelector('.facades a.on').dataset.facade === 'portfolio');
+  doc().querySelector('.facades a[data-facade="wealth"]').click();
+  await until(() => doc().querySelector('.tabs.three') && drawn(), 'Everything you own');
+  const W = DEMO.wealth;
+  check('Wealth opens on Everything you own, its total at the top', /Everything you own/.test(doc().querySelector('.hero').textContent) && /€/.test(doc().querySelector('.hero .big').textContent));
+  check('Wealth has its own three tabs', doc().querySelectorAll('.tabs a').length === 3 && doc().querySelector('.tabs a.on').getAttribute('href') === '#/wealth');
+  check('its chart opens on the tracker’s window, 1Y', doc().querySelector(`.pill.on[data-v="${W.default}"]`) && W.default === '1Y');
+  check('the investments, cash, pensions and other assets are tiles', doc().querySelectorAll('.tiles .tile').length === 4 && /Other assets/.test(doc().querySelector('.tiles').textContent));
+  for (const pill of W.pills) {
+    tap('wealth-window', pill);
+    const points = doc().querySelectorAll('.chart-box .point').length;
+    check(`everything you own over ${pill} draws its ${W.everything.windows[pill].rows.length} rows`, drawn() && points === W.everything.windows[pill].rows.length && /everything you own (rose|fell) by/.test(doc().body.textContent));
+  }
+  tap('wealth-rows');
+  check('the rows that do not add up open', doc().querySelectorAll('.dtable tbody tr').length === W.everything.disagreements.length);
+  check('the footer says when the PC published the workbook', /published it on 23 Oct 2026 at 19:00/.test(doc().querySelector('.facts').textContent));
+
+  doc().querySelector('.tabs a[href="#/savings"]').click();
+  await until(() => drawn() && doc().querySelector('.bars-box svg'), 'Savings vs stock gains');
+  check('the window carries over from Everything you own', doc().querySelector('.pill.on[data-v="All"]'));
+  for (const pill of W.pills) {
+    tap('wealth-window', pill);
+    const s = W.savings[pill];
+    const bars = s.saved_monthly.filter((v) => v != null).length + s.gained_monthly.filter((v) => v != null).length;
+    check(`savings vs stock gains over ${pill}: two lines, ${bars} bars`, drawn() && doc().querySelectorAll('.chart-box svg path').length === 2 && doc().querySelectorAll('.bars-box rect.bar').length === bars);
+  }
+  check('the month still running is faded, both its bars', doc().querySelectorAll('.bars-box rect.bar[fill-opacity]').length === 2 && /still running/.test(doc().body.textContent));
+  check('the months left out are said', /Left out: 16 months had spending but no salary/.test(doc().body.textContent));
+  const barsSvg = doc().querySelector('.bars-box svg');
+  const barsBox = barsSvg.getBoundingClientRect();
+  const atRest = doc().querySelectorAll('.readout')[1].textContent;
+  barsSvg.dispatchEvent(new f.contentWindow.PointerEvent('pointerdown', { clientX: barsBox.left + 30, clientY: barsBox.top + 40, bubbles: true, pointerType: 'touch' }));
+  check('touching a month reads its two bars out', doc().querySelectorAll('.readout')[1].textContent !== atRest && /Put away|Spent|Not counted/.test(doc().querySelectorAll('.readout')[1].textContent));
+
+  doc().querySelector('.tabs a[href="#/runway"]').click();
+  await until(() => doc().querySelector('.runway .headline'), 'Runway');
+  check('Runway leads with its one figure, in months', doc().querySelector('.runway .headline').textContent === `${W.runway.months.toFixed(1)} months` && /under a year/.test(doc().querySelector('.runway').textContent));
+
+  doc().querySelector('.facades a[data-facade="portfolio"]').click();
+  await until(() => doc().querySelector('.tabs a.on[href="#/realized"]'), 'back to Portfolio');
+  check('the switch goes back to the Portfolio screen it left', doc().querySelectorAll('.tabs a').length === 8);
+  doc().querySelector('.facades a[data-facade="wealth"]').click();
+  await until(() => doc().querySelector('.tabs a.on[href="#/runway"]'), 'back to Wealth');
+  check('and back to the Wealth screen it left', true);
+
   // Figures from an engine run before these screens existed: a sentence each.
   await open('../src/index.html?demo=old#/allocation');
   await until(() => doc().querySelector('.note-card'), 'the older figures');
   check('older figures say the screen comes with the next run', /next run of the cloud engine/.test(doc().querySelector('.note-card').textContent));
-  for (const screen of ['position', 'other-assets', 'cash', 'dividends', 'realized']) {
+  for (const screen of ['position', 'other-assets', 'cash', 'dividends', 'realized', 'wealth', 'savings', 'runway']) {
     f.contentWindow.location.hash = `#/${screen}`;
     await until(() => doc().querySelector(`.tabs a.on[href="#/${screen}"]`), screen);
     check(`${screen} says so too`, /next run of the cloud engine/.test(doc().querySelector('.note-card').textContent));
   }
+  check('so does the top of Wealth', /next run of the cloud engine/.test(doc().querySelector('.hero').textContent));
 } catch (e) {
   log.push({ name: e.message, ok: false });
 }

@@ -8,7 +8,7 @@
 // engine's job, and arrives finished per fixed range. Neither is anything on
 // the other screens (Position detail to Realized): those figures arrive
 // finished, and all that is done here is to read them and cut a price chart
-// to its range.
+// to its range. Nor on Wealth's: every window of its charts arrives worked out.
 //
 // Pure: no DOM, no storage. Days are UTC-midnight milliseconds.
 
@@ -60,19 +60,21 @@ export function rangeStart(choice, days) {
 // string. A document from a newer engine than this app understands is
 // reported rather than half-read.
 //
-// `screens` and the `prices-N` parts came later (26 Oct 2026), so a device
-// can hold figures from an engine run that had none: they are null then, and
-// the screens that need them say so in a sentence.
+// `screens` and the `prices-N` parts came later (26 Oct 2026), and `wealth`
+// later that evening, so a device can hold figures from an engine run that
+// had none: they are null then, and the screens that need them say so in a
+// sentence.
 export function readDocuments(raw) {
   if (!raw || !raw.main || !raw.series) return { problem: 'missing' };
   const parse = (d) => (typeof d.json === 'string' ? JSON.parse(d.json) : d);
   const main = parse(raw.main);
   const series = parse(raw.series);
   const screens = raw.screens ? parse(raw.screens) : null;
+  const wealth = raw.wealth ? parse(raw.wealth) : null;
   const parts = Object.keys(raw).filter((k) => /^prices-\d+$/.test(k)).map((k) => parse(raw[k]));
-  const newer = [main, series, screens, ...parts].some((d) => d && (d.schema_version || 0) > SCHEMA_VERSION);
+  const newer = [main, series, screens, wealth, ...parts].some((d) => d && (d.schema_version || 0) > SCHEMA_VERSION);
   if (newer) return { problem: 'newer' };
-  return { main, series, screens, prices: joinPrices(parts) };
+  return { main, series, screens, wealth, prices: joinPrices(parts) };
 }
 
 // Each position's price history, from however many parts the engine split

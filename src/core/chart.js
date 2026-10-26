@@ -147,6 +147,21 @@ export function nearestIndex(px, n, left, right) {
   return Math.max(0, Math.min(n - 1, Math.round(t * (n - 1))));
 }
 
+// Which point is nearest a finger at `px`, when the points sit at `xs`
+// rather than evenly: the wealth workbook's rows, a month or so apart.
+export function nearestOf(px, xs) {
+  let best = 0;
+  xs.forEach((x, i) => { if (Math.abs(x - px) < Math.abs(xs[best] - px)) best = i; });
+  return best;
+}
+
+// Which of `n` equal slots across [left, right] a finger at `px` is in: a
+// month's pair of bars on Savings vs stock gains.
+export function slotIndex(px, n, left, right) {
+  if (n <= 1) return 0;
+  return Math.max(0, Math.min(n - 1, Math.floor(((px - left) / (right - left)) * n)));
+}
+
 // Up to `count` dates along the bottom, evenly spaced, always including the
 // first and the last.
 export function dateTicks(n, count = 4) {

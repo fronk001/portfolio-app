@@ -25,13 +25,26 @@ Single user, non-technical: explain things plainly, in prose.
   (reading only; edits link to Streamlit), Cash (balance line, what moved it,
   recent events), Dividends (per year, received over time, per holding),
   Realized vs Unrealized. Checked on Fred's real figures via `?local`.
+- ✅ Built and tested late on 26 Oct (pushed once Fred says yes; see git
+  log): **Wealth**, the tracker's second facade, from the engine's `wealth`
+  document. A Portfolio / Wealth switch sits in the band at the top, one tap
+  either way, each side coming back to the screen it was left on; Wealth has
+  its own hero (everything you own), three tabs and footer. Everything you
+  own (tiles, the workbook's rows over time, the rows that don't add up),
+  Savings vs stock gains (four totals, the cumulative lines, the month-by-
+  month bars with the running month faded, averages, best and worst month),
+  Runway. Both charts share one window, 3M to All, opening on 1Y as the
+  tracker's; Custom links to the tracker. Checked on Fred's real figures via
+  `?local`.
 - The plan Fred accepted on 26 Oct, toward every screen he reads: (1) the
-  rest of Portfolio ✅; (2) Wealth; (3) Budget; (4) point Life Hub's
+  rest of Portfolio ✅; (2) Wealth ✅; (3) Budget; (4) point Life Hub's
   Portfolio launcher (`../life-hub/src/portfolio/`, which redirects to
   Streamlit today) and its `seed.local.js` tracker link here.
 - Not built: Money % against a benchmark (the engine would have to solve it;
-  the screen says so), Wealth and Budget. Log a trade, imports and the
-  other-assets editor stay in Streamlit on purpose: this app only reads.
+  the screen says so), a Wealth window of your own (Custom: too many to work
+  out ahead; each screen links to the tracker's), and Budget. Log a trade,
+  imports and the other-assets editor stay in Streamlit on purpose: this app
+  only reads.
 
 ## Run
 
@@ -41,7 +54,7 @@ No Node on this machine. Python 3.14 (`py`) + the browser do everything.
 Start Portfolio.bat                        # double-click: serves + opens the app on ?local (:8540)
 py tools/serve.py                          # http://localhost:8540/src/
 py tools/run_tests.py                      # logic + contract tests (headless Edge), exit 0 = pass
-py tools/run_tests.py tools/smoke.html     # UI smoke test: taps through all eight screens on demo data, then ?demo=old
+py tools/run_tests.py tools/smoke.html     # UI smoke test: taps through all eight Portfolio screens and Wealth's three on demo data, then ?demo=old
 py tools/run_tests.py tools/firebase-check.html  # real Firebase SDK from the CDN (needs internet, no account)
 py tools/build.py                          # dist/ = what GitHub Pages publishes (CI runs this too)
 py tools/run_tests.py tools/sw-check.html  # after build.py: offline copy installs; app opens offline from kept figures
@@ -50,14 +63,17 @@ py tools/shot.py "?demo"                   # screenshots/desktop.png + phone.png
 ```
 
 URL switches: `?demo` made-up figures · `?demo=old` the same as an engine
-from before the other six screens sent them (each says so in a sentence) ·
+from before the other six screens and Wealth sent them (each says so in a
+sentence) ·
 `?local` the tracker's figures on this laptop, served by `tools/serve.py`
 from `../Portfolio tracker/data/engine/` (write them with
 `.venv\Scripts\python.exe -m src.engine --out data\engine` there; never
 copied here) · `?reset` forget this device's copy ·
-`?range=1Y&metric=Return %25&method=Simple %25&bench=AEX` open on a chart.
+`?range=1Y&metric=Return %25&method=Simple %25&bench=AEX` open on a chart ·
+`?window=3M` Wealth's window.
 Screens by address: `#/`, `#/holdings`, `#/position/<ISIN>`, `#/allocation`,
-`#/other-assets`, `#/cash`, `#/dividends`, `#/realized`. In Git Bash, pass a
+`#/other-assets`, `#/cash`, `#/dividends`, `#/realized`; Wealth's `#/wealth`
+(Everything you own), `#/savings`, `#/runway`. In Git Bash, pass a
 `#/holdings` argument with `MSYS_NO_PATHCONV=1`, or it arrives as a Windows
 path.
 
@@ -78,8 +94,9 @@ src/core/   figures.js (ranges, Simple/Time %, benchmarks, period change: the tr
             chart.js (gridlines, paths, map tiles and colours) · format.js (euros, dates, names)
 src/data/   store.js (source, cache, Firebase listening) · cache.js (IndexedDB) ·
             firebase.js (read only) · firebase-config.js (Life Hub's registration) · demo.js (generated)
-src/ui/     app.js (boot, routes, taps) · views.js (page, tabs, Overview, Holdings) ·
-            screens.js (the other six) · chart.js (SVG line chart + map, touch readout) ·
+src/ui/     app.js (boot, routes, taps) · views.js (page, facade switch, tabs, Overview, Holdings) ·
+            screens.js (the other six) · wealth.js (Wealth's three, its hero and footer) ·
+            chart.js (SVG line chart, paired bars, map, touch readout) ·
             account.js (sign-in, sync button; Gym's) · html.js (escaping, pills, tiles)
 tests/      figures, chart, contract (vs tests/expected.js), store
 tools/      as Gym's, plus make_demo.py
@@ -107,9 +124,20 @@ tools/      as Gym's, plus make_demo.py
   how many there are; `joinPrices` keeps the newest run's count, so a part
   left over from a run that needed more is ignored. The demo is split on
   purpose so the tests join parts.
-- **A missing `screens` or `prices-N` is not an error.** Figures from an engine
-  run before 26 Oct evening have neither; each screen then says its figures
-  come with the next run (`?demo=old` shows it, the smoke test checks it).
+- **A missing `screens`, `wealth` or `prices-N` is not an error.** Figures
+  from an engine run before 26 Oct evening have none of them; each screen then
+  says its figures come with the next run (`?demo=old` shows it, the smoke
+  test checks it). A `wealth` carrying `problem` (the engine could not work
+  Wealth out, and sent the portfolio anyway) is said in a sentence too.
+- **Wealth works nothing out either** (`ui/wealth.js`). Each of the
+  tracker's pills, 3M to All, arrives as its own finished window; the phone
+  picks one and lays it out. Portfolio and Wealth stay apart, as the tracker's
+  facades: they count different things, so the switch at the top changes the
+  hero, the tabs and the footer, and neither's figures sit in the other's.
+  Savings vs stock gains keeps the tracker's blue (kept) and orange (market)
+  on its bars rather than green and red, the tracker's documented exception;
+  its tiles are green or red, coloured by the figure as written in whole
+  euros (−€0.28 is a plain €0).
 - **Benchmarks arrive as trading days with gaps**, filled within the range on
   screen, as the Streamlit app does. Filling across all history first would
   start a Saturday range on Friday's close.

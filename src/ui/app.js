@@ -1,13 +1,13 @@
 // Boot: draw this device's copy of the figures straight away, then let the
 // newest ones arrive in the background. Every screen has an address (#/ the
-// Overview, #/holdings, #/position/<ISIN>, #/cash …; views.js's SCREENS), so
-// the app comes back where it was left.
+// Overview, #/holdings, #/position/<ISIN>, #/cash …, #/wealth, #/savings,
+// #/runway; views.js's SCREENS), so the app comes back where it was left.
 
 import * as F from '../core/figures.js';
 import { get, load, startSync, subscribe, sync, syncStatus } from '../data/store.js';
 import { closeSignIn, gate, openSignIn, signInForced, signInOpen } from './account.js';
-import { drawChart, drawMap } from './chart.js';
-import { SCREENS, renderPage } from './views.js';
+import { drawBars, drawChart, drawMap } from './chart.js';
+import { SCREENS, facadeOf, renderPage } from './views.js';
 
 const root = document.getElementById('app');
 
@@ -15,13 +15,19 @@ const root = document.getElementById('app');
 // the time-weighted return beside the S&P 500 when switched to Return % —
 // as the Streamlit app's Overview does. Position detail's price chart opens
 // on three months, as the app's does: a week of one share price says little.
+// Wealth's two charts share one window, as in the app, opening on the one
+// the engine names (the app's default, 1Y). `last` is where each of the two
+// facades was left, so the switch at the top goes back there.
 const ui = {
   range: '1W', metric: 'Value', method: F.TIME, bench: 'S&P 500',
   custom: null, open: null, syncOpen: false,
   posRange: '3M', posCustom: null, cashRecent: false,
+  wealthWindow: null, wealthRows: false,
+  last: { portfolio: '#/', wealth: '#/wealth' },
 };
 let chart = null;
 let map = null;
+let bars = null;
 
 // The same choices from the address, for a bookmark and for the screenshot
 // and smoke-test tools: ?range=1Y&metric=Return %25&method=Simple %25.
@@ -30,6 +36,7 @@ if (F.RANGES.includes(asked.get('range'))) ui.range = asked.get('range');
 if (F.METRICS.includes(asked.get('metric'))) ui.metric = asked.get('metric');
 if (F.METHODS.includes(asked.get('method'))) ui.method = asked.get('method');
 if (asked.get('bench')) ui.bench = asked.get('bench');
+if (asked.get('window')) ui.wealthWindow = asked.get('window'); // ?window=3M, Wealth's
 
 // #/position/<ISIN> opens Position detail on that holding.
 function route() {
@@ -47,12 +54,16 @@ function render() {
     root.innerHTML = gate(st);
     chart = null;
     map = null;
+    bars = null;
     return;
   }
-  const page = renderPage(route(), d, ui, st);
+  const name = route();
+  ui.last[facadeOf(name)] = location.hash || '#/';
+  const page = renderPage(name, d, ui, st);
   root.innerHTML = page.html;
   chart = page.chart;
   map = page.map;
+  bars = page.bars;
   drawCharts();
 }
 
@@ -61,6 +72,8 @@ function drawCharts() {
   if (box && chart) drawChart(box, chart);
   const mapBox = root.querySelector('.map-box');
   if (mapBox && map) drawMap(mapBox, map);
+  const barsBox = root.querySelector('.bars-box');
+  if (barsBox && bars) drawBars(barsBox, bars);
 }
 
 // Custom opens on the last three months, a range worth adjusting from.
@@ -86,6 +99,8 @@ root.addEventListener('click', (e) => {
       break;
     case 'holding': ui.open = ui.open === v ? null : v; break;
     case 'cash-recent': ui.cashRecent = !ui.cashRecent; break;
+    case 'wealth-window': ui.wealthWindow = v; break;
+    case 'wealth-rows': ui.wealthRows = !ui.wealthRows; break;
     case 'sync': ui.syncOpen = !ui.syncOpen; break;
     case 'sign-in': openSignIn(); return;
     case 'sign-out': sync.signOut(); return;

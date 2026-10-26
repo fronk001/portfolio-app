@@ -4,7 +4,9 @@
 // Allocation map reads that tile out. No library: the app must open
 // instantly and work offline, and this is a few dozen lines each.
 
-import { areaPath, dateTicks, extent, inkOn, linePath, nearestIndex, niceTicks, squarify } from '../core/chart.js';
+import {
+  areaPath, dateTicks, extent, inkOn, linePath, nearestIndex, nearestOf, niceTicks, slotIndex, squarify,
+} from '../core/chart.js';
 import { esc } from './html.js';
 
 const PAD = { left: 6, right: 54, top: 10, bottom: 26 };
@@ -21,7 +23,10 @@ const triangle = (cx, cy, up) => (up
 // spec: { days: [ms], lines: [{ values, color, width, dash, fill }], yLabel(v),
 //         xLabel(ms, spanDays), readout(i) -> html, zero: boolean,
 //         marks: [{ i, value, up }]   trades, on Position detail's prices,
-//         level: { value, label }     a dotted line across: the average cost }
+//         level: { value, label }     a dotted line across: the average cost,
+//         byTime: boolean             points spaced by their dates, not evenly
+//                                     (the wealth workbook's rows),
+//         points: boolean             a dot on every point, as plotly's markers }
 export function drawChart(box, spec) {
   const w = Math.max(240, Math.round(box.clientWidth));
   const h = w < 600 ? 230 : 320;
@@ -29,6 +34,8 @@ export function drawChart(box, spec) {
   const plotW = w - PAD.left - PAD.right;
   const plotH = h - PAD.top - PAD.bottom;
   const trades = spec.marks || [];
+  const first = spec.days[0];
+  const span = n ? (spec.days[n - 1] - first) / 86400000 : 0;
 
   // The trades count towards the scale, as plotly's autorange counts them.
   const lists = [...spec.lines.map((l) => l.values), trades.map((m) => m.value)];
@@ -38,9 +45,10 @@ export function drawChart(box, spec) {
     max = Math.max(max, 0);
   }
   const { lo, hi, ticks, step } = niceTicks(min, max, w < 600 ? 3 : 4);
-  const x = (i) => PAD.left + (n <= 1 ? plotW : (i * plotW) / (n - 1));
+  const x = spec.byTime && span > 0
+    ? (i) => PAD.left + ((spec.days[i] - first) / 86400000 / span) * plotW
+    : (i) => PAD.left + (n <= 1 ? plotW : (i * plotW) / (n - 1));
   const y = (v) => PAD.top + plotH - ((v - lo) / (hi - lo || 1)) * plotH;
-  const span = n ? (spec.days[n - 1] - spec.days[0]) / 86400000 : 0;
 
   const grid = ticks.map((t) => `
     <line class="grid${t === 0 && spec.zero ? ' zero' : ''}" x1="${PAD.left}" x2="${PAD.left + plotW}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}"/>
@@ -56,10 +64,12 @@ export function drawChart(box, spec) {
     <line class="level" x1="${PAD.left}" x2="${PAD.left + plotW}" y1="${y(spec.level.value).toFixed(1)}" y2="${y(spec.level.value).toFixed(1)}"/>
     <text class="level-label" x="${PAD.left + 4}" y="${(y(spec.level.value) - 5).toFixed(1)}">${esc(spec.level.label)}</text>` : '';
   const triangles = trades.map((m) => `<path class="mark" d="${triangle(x(m.i), y(m.value), m.up)}" fill="${m.up ? BUY : SELL}"/>`).join('');
+  const points = spec.points ? spec.lines.map((l) => l.values.map((v, i) => (v == null || !Number.isFinite(v) ? ''
+    : `<circle class="point" cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.5" fill="${l.color}"/>`)).join('')).join('') : '';
   const dots = spec.lines.map((l) => `<circle class="dot" r="4" fill="${l.color}" stroke="var(--card)" stroke-width="2"/>`).join('');
 
   box.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${spec.label || 'Chart'}">
-    ${grid}${dates}${areas}${level}${paths}${triangles}
+    ${grid}${dates}${areas}${level}${paths}${points}${triangles}
     <line class="cursor" y1="${PAD.top}" y2="${PAD.top + plotH}"/>
     ${dots}
   </svg>`;
@@ -84,8 +94,78 @@ export function drawChart(box, spec) {
     });
     if (readout) readout.innerHTML = spec.readout(i);
   };
-  const at = (e) => nearestIndex(e.clientX - svg.getBoundingClientRect().left, n, PAD.left, PAD.left + plotW);
+  const xs = spec.byTime ? spec.days.map((_, i) => x(i)) : null;
+  const at = (e) => {
+    const px = e.clientX - svg.getBoundingClientRect().left;
+    return xs ? nearestOf(px, xs) : nearestIndex(px, n, PAD.left, PAD.left + plotW);
+  };
 
+  svg.addEventListener('pointerdown', (e) => show(at(e), true));
+  svg.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse' || e.buttons) show(at(e), true);
+  });
+  const rest = () => show(n - 1, false);
+  svg.addEventListener('pointerleave', rest);
+  svg.addEventListener('pointerup', (e) => { if (e.pointerType !== 'mouse') rest(); });
+  svg.addEventListener('pointercancel', rest);
+  rest();
+}
+
+// Bars in pairs, one pair a month, either side of a zero line: Savings vs
+// stock gains, month by month. Grouped rather than stacked, as the tracker
+// draws them: two separate quantities, each measured from zero. A month
+// still running is drawn faded. A finger on a month reads the pair out.
+//
+// spec: { days: [ms], series: [{ values, color }], faded: [boolean],
+//         yLabel(v, step), xLabel(ms), readout(i) -> html, label }
+export function drawBars(box, spec) {
+  const w = Math.max(240, Math.round(box.clientWidth));
+  const h = w < 600 ? 230 : 320;
+  const n = spec.days.length;
+  const plotW = w - PAD.left - PAD.right;
+  const plotH = h - PAD.top - PAD.bottom;
+
+  let [min, max] = extent(spec.series.map((s) => s.values));
+  min = Math.min(min, 0);
+  max = Math.max(max, 0);
+  const { lo, hi, ticks, step } = niceTicks(min, max, w < 600 ? 3 : 4);
+  const y = (v) => PAD.top + plotH - ((v - lo) / (hi - lo || 1)) * plotH;
+  const slot = plotW / Math.max(1, n);
+  const pair = slot * 0.8; // plotly's bargap of 0.2
+  const bar = pair / spec.series.length;
+  const left = (i) => PAD.left + i * slot + (slot - pair) / 2;
+  const zero = y(0);
+
+  const grid = ticks.map((t) => `
+    <line class="grid${t === 0 ? ' zero' : ''}" x1="${PAD.left}" x2="${PAD.left + plotW}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}"/>
+    <text class="ylab" x="${w - 4}" y="${(y(t) + 4).toFixed(1)}" text-anchor="end">${spec.yLabel(t, step)}</text>`).join('');
+  const dates = dateTicks(n, w < 600 ? 2 : 4).map((i, k, all) => {
+    const anchor = k === 0 ? 'start' : k === all.length - 1 ? 'end' : 'middle';
+    const at = anchor === 'start' ? left(i) : anchor === 'end' ? left(i) + pair : left(i) + pair / 2;
+    return `<text class="xlab" x="${at.toFixed(1)}" y="${h - 6}" text-anchor="${anchor}">${spec.xLabel(spec.days[i])}</text>`;
+  }).join('');
+  const bars = spec.series.map((s, k) => s.values.map((v, i) => {
+    if (v == null || !Number.isFinite(v)) return '';
+    const top = Math.min(y(v), zero);
+    return `<rect class="bar" x="${(left(i) + k * bar).toFixed(1)}" y="${top.toFixed(1)}" width="${Math.max(0.6, bar - 0.6).toFixed(1)}" height="${Math.max(0.6, Math.abs(y(v) - zero)).toFixed(1)}" fill="${s.color}"${spec.faded[i] ? ' fill-opacity="0.45"' : ''}/>`;
+  }).join('')).join('');
+
+  box.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${spec.label || 'Chart'}">
+    ${grid}${dates}
+    <rect class="slot" y="${PAD.top}" height="${plotH}" width="${slot.toFixed(1)}"/>
+    ${bars}
+    <line class="grid zero" x1="${PAD.left}" x2="${PAD.left + plotW}" y1="${zero.toFixed(1)}" y2="${zero.toFixed(1)}"/>
+  </svg>`;
+
+  const svg = box.firstElementChild;
+  const shade = svg.querySelector('.slot');
+  const readout = box.parentElement.querySelector('.readout');
+  const show = (i, touching) => {
+    shade.setAttribute('x', (PAD.left + i * slot).toFixed(1));
+    shade.style.opacity = touching ? 1 : 0;
+    if (readout) readout.innerHTML = spec.readout(i);
+  };
+  const at = (e) => slotIndex(e.clientX - svg.getBoundingClientRect().left, n, PAD.left, PAD.left + plotW);
   svg.addEventListener('pointerdown', (e) => show(at(e), true));
   svg.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'mouse' || e.buttons) show(at(e), true);

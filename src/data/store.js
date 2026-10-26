@@ -6,8 +6,9 @@
 //
 // Dev switches in the URL. None of them touches this device's real copy:
 //   ?demo     made-up figures (tools/make_demo.py)
-//   ?demo=old the same, as an engine from before the other screens sent
-//             them: main and series only (the smoke test checks the sentences)
+//   ?demo=old the same, as an engine from before the other screens and
+//             Wealth sent them: main and series only (the smoke test checks
+//             the sentences)
 //   ?local    the tracker's own figures on this laptop, as its engine last
 //             wrote them (tools/serve.py serves them; never copied here)
 //   ?reset    forget this device's copy first
@@ -33,12 +34,12 @@ export const syncStatus = () => status;
 export const subscribe = (fn) => subscribers.add(fn);
 const setStatus = (next) => { status = next; emit(); };
 
-// `raw` is { main: { json }, series: { json }, screens, prices-1 … }, or the
-// documents themselves. Only main and series have to be there.
+// `raw` is { main: { json }, series: { json }, screens, wealth, prices-1 … },
+// or the documents themselves. Only main and series have to be there.
 function accept(raw) {
   const read = readDocuments(raw);
   if (read.problem) return read.problem;
-  docs = { main: read.main, series: prepare(read.series), screens: read.screens, prices: read.prices };
+  docs = { main: read.main, series: prepare(read.series), screens: read.screens, wealth: read.wealth, prices: read.prices };
   return null;
 }
 
@@ -51,11 +52,12 @@ async function localDocuments() {
     return r.json();
   });
   const optional = (name) => fetchDoc(name).catch(() => null);
-  const [main, series, screens, first] = await Promise.all(
-    [fetchDoc('main'), fetchDoc('series'), optional('screens'), optional('prices-1')],
+  const [main, series, screens, wealth, first] = await Promise.all(
+    [fetchDoc('main'), fetchDoc('series'), optional('screens'), optional('wealth'), optional('prices-1')],
   );
   const raw = { main, series };
   if (screens) raw.screens = screens;
+  if (wealth) raw.wealth = wealth;
   if (first) {
     raw['prices-1'] = first;
     const rest = await Promise.all(Array.from({ length: first.parts - 1 }, (_, k) => optional(`prices-${k + 2}`)));

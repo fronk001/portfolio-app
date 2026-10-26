@@ -39,7 +39,7 @@
   --gain: #0a7a0a;
   --loss: #b8302f;
   --serif: Fraunces, Georgia, serif;
-  --band: 44px; --edge: 16px; --safe: env(safe-area-inset-top);
+  --band: 52px; --edge: 16px; --safe: env(safe-area-inset-top);
   color-scheme: light;
 }
 
@@ -76,8 +76,10 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
   color: var(--muted); font-size: 14px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px;
 }
 
+/* On the right, where the sync button would be: ?demo and ?local have none,
+   and the left of the band holds the Portfolio / Wealth switch. */
 .demo-badge {
-  position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 10;
+  position: fixed; top: calc(16px + env(safe-area-inset-top)); right: var(--edge); z-index: 10;
   padding: 4px 10px; border-radius: 999px; background: var(--amber); color: var(--card);
   font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
 }
@@ -89,6 +91,18 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
   padding: calc(var(--safe) + var(--band)) var(--edge) calc(32px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; gap: 16px;
 }
+
+/* Portfolio or Wealth, the tracker's facades: in the band at the top, one tap
+   from either to the other, each coming back to the screen it was left on. */
+.facades {
+  position: absolute; z-index: 9; top: calc(var(--safe) + (var(--band) - 40px) / 2); left: var(--edge);
+  display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--rest);
+}
+.facades a {
+  min-height: 34px; padding: 0 15px; display: flex; align-items: center; border-radius: 999px;
+  text-decoration: none; font-weight: 600; font-size: 14px; color: var(--neutral-ink);
+}
+.facades a.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(30, 29, 26, 0.12); }
 
 .hero { display: flex; flex-direction: column; gap: 4px; }
 .hero .big { font-family: var(--serif); font-size: 42px; font-weight: 600; line-height: 1.05; font-variant-numeric: tabular-nums; }
@@ -113,14 +127,15 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
   .tiles.lead .tile:first-child { grid-column: auto; }
 }
 
-/* Eight screens: two rows of four on a phone, every one in sight without
-   scrolling sideways; one row from tablet width up. */
+/* Portfolio's eight screens: two rows of four, every one in sight without
+   scrolling sideways. Wealth's three: one row. */
 .tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 14px; background: var(--rest); }
 .tabs a {
   min-height: 40px; padding: 2px 2px; display: flex; align-items: center; justify-content: center; border-radius: 10px;
   text-decoration: none; font-weight: 600; font-size: 13px; line-height: 1.15; text-align: center; color: var(--neutral-ink);
 }
 .tabs a.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(30, 29, 26, 0.12); }
+.tabs.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .block { display: flex; flex-direction: column; gap: 10px; }
 .block h2, .card-title { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
@@ -148,6 +163,9 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
 
 .headline { font-family: var(--serif); font-size: 32px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .headline .per { font-family: 'Instrument Sans', sans-serif; font-size: 14px; font-weight: 500; margin-left: 6px; }
+.runway { gap: 4px; }
+.runway .headline { font-size: 40px; }
+.runway .lead { font-size: 16px; font-weight: 600; color: var(--neutral-ink); }
 
 .chart { display: flex; flex-direction: column; gap: 6px; }
 .readout { min-height: 40px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -155,11 +173,12 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
 .readout .k { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 .readout .k::before { content: ''; width: 12px; height: 3px; border-radius: 2px; background: var(--c); }
 .readout .plain { color: var(--muted); }
-.chart-box { width: 100%; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
-.chart-box svg { display: block; overflow: visible; }
-.chart-box .grid { stroke: var(--line-soft); stroke-width: 1; }
-.chart-box .grid.zero { stroke: #c3c2b7; }
-.chart-box text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart-box, .bars-box { width: 100%; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.chart-box svg, .bars-box svg { display: block; overflow: visible; }
+.chart-box .grid, .bars-box .grid { stroke: var(--line-soft); stroke-width: 1; }
+.chart-box .grid.zero, .bars-box .grid.zero { stroke: #c3c2b7; }
+.chart-box text, .bars-box text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.bars-box .slot { fill: var(--ink); fill-opacity: 0.06; opacity: 0; }
 .chart-box .cursor { stroke: var(--box); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0; }
 .chart-box .dot { opacity: 0; }
 .chart-box .mark { stroke: #fcfcfb; stroke-width: 1; }

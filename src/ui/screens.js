@@ -20,18 +20,18 @@ const BLUE = '#2a78d6';
 const PURPLE = '#7a5cd0';
 
 // Figures from an engine run older than these screens: said, not an error.
-const notYet = (what) => `
+export const notYet = (what) => `
   <section class="card note-card">
     <p class="empty">${what} come with the next run of the cloud engine. The figures on this device were worked out before this screen existed; they update by themselves within the hour.</p>
   </section>`;
 
-const page = (html, extra = {}) => ({ html, chart: null, map: null, ...extra });
+export const page = (html, extra = {}) => ({ html, chart: null, map: null, bars: null, ...extra });
 
 const name = (n) => esc(titleCase(n));
 
 // A table whose columns past `keep` are left out on a phone, as the
 // Streamlit app drops its least-used columns there.
-function table(heads, rows, { keep = heads.length, cls = '' } = {}) {
+export function table(heads, rows, { keep = heads.length, cls = '' } = {}) {
   const wide = (k) => (k >= keep ? ' class="wide"' : '');
   return `
   <div class="card table-card">

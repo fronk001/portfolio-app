@@ -70,6 +70,21 @@ export function shortDate(text) {
   return `${d} ${MONTHS[m - 1]} ${y}`;
 }
 
+// A month as the Wealth screens write it, from "2026-07": "Jul 2026" on an
+// axis or a label, "July 2026" in a sentence.
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+export const shortMonth = (period) => `${MONTHS[+period.slice(5, 7) - 1]} ${period.slice(0, 4)}`;
+export const monthName = (period) => `${MONTH_NAMES[+period.slice(5, 7) - 1]} ${period.slice(0, 4)}`;
+export const axisMonth = (ms) => shortMonth(new Date(ms).toISOString().slice(0, 7));
+
+// "26 Oct 2026 at 14:51", from a stamp written on the PC in its own time
+// ("2026-10-26T14:51:28"): read as written, not converted.
+export function stampText(text) {
+  if (!text) return '—';
+  const time = text.slice(11, 16);
+  return time ? `${shortDate(text)} at ${time}` : shortDate(text);
+}
+
 // When the engine worked the figures out, in Dutch time: "14:15 today",
 // "09:15 yesterday", "21:15 on 23 Oct".
 export function workedOut(iso, now = new Date()) {

@@ -21,6 +21,7 @@ test('the app opens from this device’s copy, before any network', async () => 
   ok(d.series.days.length === DEMO.series.dates.length, 'the series came back, days and all');
   ok(d.screens && d.screens.positions.length === DEMO.screens.positions.length, 'the other screens came back');
   ok(d.prices && Object.keys(d.prices).length > 0, 'and the price histories, from their parts');
+  ok(d.wealth && d.wealth.everything.total_eur === DEMO.wealth.everything.total_eur, 'and Wealth');
 
   await cache.clear();
   eq(await cache.get('v1'), undefined);

@@ -22,11 +22,18 @@ calculations (`../Portfolio tracker/src`) — that is the point of it. Writes:
                        range starts and ends on a price history read back
                        from its gaps, and which trades it shows.
 
+The Wealth document is made the same way: a made-up workbook export, monthly
+portfolio summary, savings and runway, put through the engine's own
+`_wealth_blocks`, so every window arrives worked out exactly as the engine
+works it out. The phone works nothing out on Wealth, so tests/expected.js has
+no answers for it; the smoke test taps through it instead.
+
 Deterministic: the same file every run.
 """
 import json
 import zlib
 import sys
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -36,7 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TRACKER = ROOT.parent / "Portfolio tracker"
 sys.path.insert(0, str(TRACKER))
 
-from src import asset_prices, calculations, engine, manual_assets  # noqa: E402
+from src import asset_prices, calculations, engine, export_summary, manual_assets  # noqa: E402
 
 START, END = "2023-01-02", "2026-10-23"  # a Friday
 CUSTOM = ("2024-02-10", "2025-06-30")  # a Saturday start, as the app's picker allows
@@ -202,9 +209,10 @@ def build_documents():
         "benchmark_problems": [],
     }
     main = build_main(frame, twr, generated_at)
-    screens, price_parts = build_screens(frame, main, generated_at, rng)
+    screens, price_parts, assets = build_screens(frame, main, generated_at, rng)
+    wealth = build_wealth(frame, main, assets, generated_at, rng)
     # in the engine's order: main last
-    return {**price_parts, "screens": screens, "series": series, "main": main}
+    return {**price_parts, "screens": screens, "wealth": wealth, "series": series, "main": main}
 
 
 # --- the other screens, through the engine's own builders ----------------------
@@ -337,7 +345,8 @@ def _cash_events(frame, tx, dividends):
 
 def build_screens(frame, main, generated_at, rng):
     """The screens document and the price histories, made by the engine's own
-    builders from made-up trades, dividends and cash."""
+    builders from made-up trades, dividends and cash; and the other assets,
+    which Wealth counts too."""
     tx, summary, histories = _trades_and_histories(main, rng)
     dividends = _dividend_events(frame, main)
     ce = _cash_events(frame, tx, dividends)
@@ -366,7 +375,137 @@ def build_screens(frame, main, generated_at, rng):
         parts = engine._price_documents(histories, generated_at)
     finally:
         engine.PRICE_PART_BYTES = budget
-    return screens, parts
+    return screens, parts, assets
+
+
+# --- Wealth, through the engine's own builders ---------------------------------
+
+#: The demo's "today": the series' last day, so the windows end there.
+TODAY = date(2026, 10, 23)
+
+
+def _months(first, last):
+    out, (y, m) = [], first
+    while (y, m) <= last:
+        out.append(f"{y:04d}-{m:02d}")
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+def _workbook(frame, rng):
+    """A made-up wealth workbook export, as `networth.load` returns it: a row
+    a month or so from Feb 2022, the first four typed as totals only, two
+    whose recorded total is off, and the newest on the series' last day."""
+    rows, cash, pension = [], 7000.0, 0.0
+    for period in _months((2022, 2), (2026, 10)):
+        if period in ("2023-08", "2025-01"):  # a month nobody filled in
+            continue
+        day = TODAY if period == "2026-10" else pd.Timestamp(f"{period}-{18 + rng.integers(0, 10):02d}").date()
+        cash = max(2000.0, cash + rng.normal(150, 900))
+        pension = pension + 180.0 if period >= "2024-01" else 0.0
+        stamp = pd.Timestamp(day)
+        broker = (
+            float(frame["value_eur"].asof(stamp) + frame["cash_eur"].asof(stamp))
+            if stamp >= frame.index[0] else 9000.0
+        )
+        crypto = round(600 + 400 * np.sin(len(rows) / 5.0), 2)
+        accounts = {"Demo Broker": round(broker, 2), "Demo Crypto": crypto,
+                    "Demo Bank": round(cash * 0.7, 2), "Demo Savings": round(cash * 0.3, 2)}
+        if pension:
+            accounts["Demo Pension"] = round(pension, 2)
+        total = round(sum(accounts.values()), 2)
+        breakdown = len(rows) >= 4
+        recorded = total + {"2023-05": 10.0, "2025-09": 1250.0}.get(period, 0.0)
+        rows.append({
+            "date": day.isoformat(), "period": period,
+            "total": total if breakdown else round(recorded, 2),
+            "investment": round(broker + crypto, 2) if breakdown else None,
+            "cash": round(cash, 2) if breakdown else None,
+            "pension": round(pension, 2) if breakdown else None,
+            "unclassified": 0.0 if breakdown else None,
+            "accounts": accounts if breakdown else {},
+            "has_breakdown": breakdown,
+            "recorded_total": round(recorded, 2),
+            "disagreement": round(recorded - total, 2) if breakdown else None,
+        })
+    return {"ok": True, "path": "demo", "modified": "2026-10-23T18:55:00",
+            "snapshots": rows, "unknown_accounts": [], "generated_at": "2026-10-23T19:00:04"}
+
+
+def _portfolio_summary(frame, assets, generated_at):
+    """`export_summary.build_summary`'s shape, from the demo's daily series:
+    what the portfolio was worth at each month end, and what had been put in."""
+    ends = frame.groupby(frame.index.strftime("%Y-%m")).last()
+    last = frame.iloc[-1]
+    return {
+        "schema_version": export_summary.SCHEMA_VERSION, "generated_at": generated_at, "empty": False,
+        "coverage": {}, "totals": {"total_eur": round(float(last["value_eur"] + last["cash_eur"]), 2)},
+        "other_assets": export_summary.other_assets_rows(assets),
+        "months": [
+            {"period": period, "value_eur": round(float(row["value_eur"]), 2),
+             "cash_eur": round(float(row["cash_eur"]), 2),
+             "net_deposits_eur": round(float(row["net_deposits_eur"]), 2)}
+            for period, row in ends.iterrows()
+        ],
+    }
+
+
+def _budget_months(rng):
+    """What `analytics.savings` reads, per month: spending since Oct 2020, a
+    salary from Feb 2022, two months with nothing at all, and the month in
+    progress with only part of its spending entered."""
+    out = {}
+    for period in _months((2020, 10), (2026, 10)):
+        if period in ("2023-03", "2023-04"):
+            continue
+        spent = 1650.40 if period == "2026-10" else round(float(rng.normal(2900, 380)), 2)
+        salary = round(3300 + 120 * (int(period[:4]) - 2022), 2) if period >= "2022-02" else None
+        out[period] = (salary, spent)
+    return out
+
+
+def _saving_for(table):
+    """`analytics.savings(store, months, today)`, in its shape, over the
+    made-up months: the rows the Wealth screen reads and the counts it words."""
+    current = f"{TODAY:%Y-%m}"
+
+    def saving(months):
+        rows = []
+        for period in months:
+            salary, spent = table.get(period, (None, None))
+            state = ("no_data" if salary is None and spent is None
+                     else "no_salary" if salary is None else "present")
+            rows.append({"period": period, "state": state, "is_current": period == current,
+                         "saved": round(salary - spent, 2) if state == "present" else None})
+        return {
+            "rows": rows,
+            "months_missing": sum(1 for r in rows if r["state"] == "no_data"),
+            "months_no_salary_past": sum(
+                1 for r in rows if r["state"] == "no_salary" and not r["is_current"]
+            ),
+        }
+    return saving
+
+
+def build_wealth(frame, main, assets, generated_at, rng):
+    """The Wealth document, made by the engine's own `_wealth_blocks` from a
+    made-up workbook, portfolio summary, savings and runway."""
+    budget = engine._budget_modules()
+    table = _budget_months(rng)
+    recent = [p for p in sorted(table) if p < f"{TODAY:%Y-%m}"][-12:]
+    spend = round(sum(table[p][1] for p in recent) / len(recent), 2)
+    total = round(main["header"]["securities_eur"] + main["header"]["cash_eur"], 2)
+    report = {
+        "available": True,
+        "net_worth": {"total": total},
+        "runway": {"months": round(total / spend, 1), "monthly_spend": spend,
+                   "based_on": len(recent), "from": recent[0], "to": recent[-1]},
+    }
+    return engine._wealth_blocks(
+        budget["networth"], budget["store_module"], _workbook(frame, rng),
+        _portfolio_summary(frame, assets, generated_at), _saving_for(table), report,
+        TODAY, generated_at,
+    )
 
 
 # --- the answers ---------------------------------------------------------------
@@ -502,6 +641,17 @@ def check_shape(documents):
         assert set(real_screens[block]) == set(demo_screens[block]), f"{block} keys differ"
     assert set(real_screens["positions"][0]) == set(demo_screens["positions"][0]), "position keys differ"
     assert set(load("prices-1")) == set(documents["prices-1"]), "prices keys differ"
+    if not (real / "wealth.json").is_file():
+        return
+    real_w, demo_w = load("wealth"), documents["wealth"]
+    assert set(real_w) == set(demo_w), "wealth keys differ from the engine's"
+    for block in ("everything", "runway"):
+        assert set(real_w[block]) == set(demo_w[block]), f"wealth {block} keys differ"
+    assert set(real_w["savings"]) == set(demo_w["savings"]), "wealth windows differ"
+    worked = lambda doc: next(w for w in doc["savings"].values() if w["state"] == "ok")  # noqa: E731
+    assert set(worked(real_w)) == set(worked(demo_w)), "a savings window's keys differ"
+    first = lambda doc: next(iter(doc["everything"]["windows"].values()))  # noqa: E731
+    assert set(first(real_w)) == set(first(demo_w)), "an everything window's keys differ"
 
 
 def main():

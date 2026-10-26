@@ -2,7 +2,7 @@
 
 import { test, eq, ok } from './harness.js';
 import * as F from '../src/core/figures.js';
-import { eur, pct, signedEur, titleCase } from '../src/core/format.js';
+import { eur, monthName, pct, shortMonth, signedEur, stampText, titleCase } from '../src/core/format.js';
 
 const days = (from, n) => Array.from({ length: n }, (_, i) => F.dayString(F.parseDay(from) + i * 86400000));
 const series = (dates) => F.prepare({ dates, columns: {} });
@@ -64,9 +64,10 @@ test('a document from a newer engine is refused, not half-read', () => {
 
 test('figures from before the other screens existed still open, without them', () => {
   const read = F.readDocuments({ main: { json: '{"schema_version":1}' }, series: { json: '{"dates":[]}' } });
-  eq([read.screens, read.prices], [null, null]);
+  eq([read.screens, read.wealth, read.prices], [null, null, null]);
   const newer = { json: JSON.stringify({ schema_version: F.SCHEMA_VERSION + 1 }) };
   eq(F.readDocuments({ main: { json: '{}' }, series: { json: '{}' }, screens: newer }), { problem: 'newer' });
+  eq(F.readDocuments({ main: { json: '{}' }, series: { json: '{}' }, wealth: newer }), { problem: 'newer' });
 });
 
 test('price histories are joined from their parts, and a stale part is ignored', () => {
@@ -91,4 +92,10 @@ test('trades are marked inside the range only, a priceless day on the next', () 
   const h = F.priceHistory({ from: '2026-10-22', gaps: [1, 4, 1], values: [1, 2, 3, 4] });
   const trades = [['2026-10-21', 1, 9], ['2026-10-24', 2, 9], ['2026-10-28', -3, 9], ['2026-10-29', 1, 9]];
   eq(F.tradesOnChart(trades, h.days, 1, 3).map((t) => [t.i, t.qty]), [[2, 2], [3, -3]]);
+});
+
+test('Wealth writes its months and the PC’s publish time as they are', () => {
+  eq([shortMonth('2026-07'), monthName('2025-12'), shortMonth('2020-01')], ['Jul 2026', 'December 2025', 'Jan 2020']);
+  // written on the PC in its own time: not moved to another zone
+  eq([stampText('2026-10-23T19:00:04'), stampText('2026-10-23'), stampText(null)], ['23 Oct 2026 at 19:00', '23 Oct 2026', '—']);
 });

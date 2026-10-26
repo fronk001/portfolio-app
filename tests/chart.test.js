@@ -1,6 +1,6 @@
 import { test, eq, ok } from './harness.js';
 import {
-  areaPath, dateTicks, extent, inkOn, linePath, nearestIndex, niceTicks, pnlColour, squarify,
+  areaPath, dateTicks, extent, inkOn, linePath, nearestIndex, nearestOf, niceTicks, pnlColour, slotIndex, squarify,
 } from '../src/core/chart.js';
 
 test('gridlines land on round numbers and cover the data', () => {
@@ -60,4 +60,13 @@ test('map colours run red, off-white, green, and hold past ±40%', () => {
     ['#d03b3b', '#d03b3b', '#f0efec', '#f0efec', '#0ca30c', '#0ca30c']);
   eq(pnlColour(20), '#7ec97c');
   eq([inkOn('#f0efec'), inkOn('#0ca30c'), inkOn('#d03b3b')], ['#1E1D1A', '#FFFFFF', '#FFFFFF']);
+});
+
+test('a finger finds the nearest of unevenly spaced points, and the month it is over', () => {
+  // the wealth workbook's rows: a month apart, then a gap of three
+  const xs = [10, 40, 70, 160, 190];
+  eq([0, 24, 26, 114, 116, 400].map((px) => nearestOf(px, xs)), [0, 0, 1, 2, 3, 4]);
+  // twelve months' bars across 0..120: ten pixels each, clamped at both ends
+  eq([-5, 0, 9.9, 10, 119, 130].map((px) => slotIndex(px, 12, 0, 120)), [0, 0, 0, 1, 11, 11]);
+  eq(slotIndex(50, 1, 0, 120), 0);
 });
