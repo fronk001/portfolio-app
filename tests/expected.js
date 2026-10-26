@@ -1756,5 +1756,142 @@ export const EXPECTED = {
    "All",
    "2019-01-01"
   ]
- ]
+ ],
+ "positions": {
+  "XX2320953855": {
+   "1W": {
+    "first": "2026-10-16",
+    "last": "2026-10-23",
+    "points": 6,
+    "first_price": 63.7081,
+    "trades": 0
+   },
+   "1M": {
+    "first": "2026-09-23",
+    "last": "2026-10-23",
+    "points": 23,
+    "first_price": 63.4813,
+    "trades": 0
+   },
+   "3M": {
+    "first": "2026-07-23",
+    "last": "2026-10-23",
+    "points": 67,
+    "first_price": 56.7301,
+    "trades": 0
+   },
+   "6M": {
+    "first": "2026-04-23",
+    "last": "2026-10-23",
+    "points": 132,
+    "first_price": 52.3899,
+    "trades": 0
+   },
+   "YTD": {
+    "first": "2026-01-01",
+    "last": "2026-10-23",
+    "points": 212,
+    "first_price": 60.5603,
+    "trades": 1
+   },
+   "1Y": {
+    "first": "2025-10-23",
+    "last": "2026-10-23",
+    "points": 262,
+    "first_price": 66.8246,
+    "trades": 1
+   },
+   "3Y": {
+    "first": "2023-10-23",
+    "last": "2026-10-23",
+    "points": 785,
+    "first_price": 49.139,
+    "trades": 2
+   },
+   "All": {
+    "first": "2023-04-03",
+    "last": "2026-10-23",
+    "points": 930,
+    "first_price": 46.8576,
+    "trades": 3
+   }
+  },
+  "XX4095262508": {
+   "1W": {
+    "first": "2026-10-16",
+    "last": "2026-10-23",
+    "points": 6,
+    "first_price": 10.377,
+    "trades": 0
+   },
+   "1M": {
+    "first": "2026-09-23",
+    "last": "2026-10-23",
+    "points": 23,
+    "first_price": 9.5205,
+    "trades": 0
+   },
+   "3M": {
+    "first": "2026-07-23",
+    "last": "2026-10-23",
+    "points": 67,
+    "first_price": 8.2447,
+    "trades": 0
+   },
+   "6M": {
+    "first": "2026-04-23",
+    "last": "2026-10-23",
+    "points": 132,
+    "first_price": 7.7784,
+    "trades": 0
+   },
+   "YTD": {
+    "first": "2026-01-01",
+    "last": "2026-10-23",
+    "points": 212,
+    "first_price": 7.125,
+    "trades": 0
+   },
+   "1Y": {
+    "first": "2025-10-23",
+    "last": "2026-10-23",
+    "points": 262,
+    "first_price": 6.9181,
+    "trades": 0
+   },
+   "3Y": {
+    "first": "2023-10-23",
+    "last": "2026-10-23",
+    "points": 785,
+    "first_price": 7.5608,
+    "trades": 1
+   },
+   "All": {
+    "first": "2023-03-03",
+    "last": "2026-10-23",
+    "points": 951,
+    "first_price": 7.3147,
+    "trades": 2
+   }
+  }
+ },
+ "priced": [
+  "XX0363239565",
+  "XX0466640167",
+  "XX1830667979",
+  "XX1994644420",
+  "XX2180309397",
+  "XX2272733439",
+  "XX2320953855",
+  "XX2389651087",
+  "XX2448293361",
+  "XX3494903186",
+  "XX3988588935",
+  "XX4095262508"
+ ],
+ "price_parts": 2,
+ "daily_last": {
+  "cash": "2026-10-23",
+  "dividends": "2026-09-15"
+ }
 };

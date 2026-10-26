@@ -59,7 +59,7 @@ export function firebaseBackend(config) {
       await A.sendPasswordResetEmail(auth, email);
     },
 
-    // Both documents, every time either changes. Only the JSON strings travel
+    // Every document in the folder, every time one changes. Only the JSON strings travel
     // on: they are what the engine wrote and what this device keeps.
     listen(uid, onDocs, onError) {
       const { F, db } = fb;

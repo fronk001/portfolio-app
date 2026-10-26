@@ -1,8 +1,11 @@
 <!DOCTYPE html>
 <!-- UI smoke test: taps through the real app on the demo figures — every
      range, every metric and return method, Custom dates, the benchmark
-     choice, the Holdings screen and a holding — and checks each draws a
-     chart (or says why not) without an error.
+     choice, the Holdings screen and a holding, then each of the other six
+     screens (a position's ranges and a sold one, the map, cash events, the
+     booked results) — and checks each draws (or says why not) without an
+     error. Last, the same screens on figures from an engine run before they
+     existed (?demo=old), which must each say so in a sentence.
      Run with: py tools/run_tests.py tools/smoke.html -->
 <html lang="en">
 <head><meta charset="utf-8"><title>Smoke test</title></head>
@@ -36,11 +39,14 @@ const drawn = () => {
   return path && path.getAttribute('d').length > 20 && doc().querySelector('.readout').textContent.trim();
 };
 const chartOrReason = () => drawn() || (doc().querySelector('.chart-card .empty') || {}).textContent;
-
-try {
-  await new Promise((r) => { f.addEventListener('load', r, { once: true }); f.src = '../src/index.html?demo'; });
+async function open(url) {
+  await new Promise((r) => { f.addEventListener('load', r, { once: true }); f.src = url; });
   f.contentWindow.addEventListener('error', (e) => errors.push(e.message));
   f.contentWindow.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
+}
+
+try {
+  await open('../src/index.html?demo');
   await until(drawn, 'the first chart');
   check('it opens on 1W and on value', doc().querySelector('.pill.on[data-v="1W"]') && doc().querySelector('.pill.on[data-v="Value"]'));
 
@@ -90,6 +96,75 @@ try {
   rows[0].click();
   check('a holding opens to its details', doc().querySelector('.holding.open .detail') && /Average cost/.test(doc().querySelector('.detail').textContent));
   check('the facts say where the figures come from', /Made-up figures/.test(doc().querySelector('.facts').textContent));
+  check('every screen has a tab', doc().querySelectorAll('.tabs a').length === 8);
+
+  // Position detail, from the holding's own link.
+  const isin = doc().querySelector('.holding.open .hrow').dataset.v;
+  doc().querySelector('.holding.open .wide-row a').click();
+  await until(() => drawn() && doc().querySelector('[data-act="position"]'), 'Position detail');
+  check('the holding’s link opens its Position detail', doc().querySelector('[data-act="position"]').value === isin);
+  check('Position detail opens on 3M, with its six figures', doc().querySelector('.pill.on[data-v="3M"]') && doc().querySelectorAll('.tiles.six .tile').length === 6);
+  for (const range of ['1W', '1M', '6M', 'YTD', '1Y', '3Y', 'All']) {
+    tap('pos-range', range);
+    check(`the price chart over ${range} draws`, drawn());
+  }
+  check('trades are marked on it', doc().querySelectorAll('.chart-box .mark').length >= 2);
+  tap('pos-range', 'Custom');
+  const posFrom = doc().querySelector('[data-act="pos-from"]');
+  check('Custom offers two dates on a position too', posFrom && doc().querySelector('[data-act="pos-to"]'));
+  posFrom.value = '2025-01-02';
+  posFrom.dispatchEvent(new Event('change', { bubbles: true }));
+  check('a custom range of a position draws', drawn() && doc().querySelector('[data-act="pos-from"]').value === '2025-01-02');
+  const picker = doc().querySelector('[data-act="position"]');
+  const sold = picker.querySelector('optgroup[label="Sold"] option');
+  picker.value = sold.value;
+  picker.dispatchEvent(new Event('change', { bubbles: true }));
+  // the picker holds its new value at once; the page is drawn anew after
+  await until(() => !picker.isConnected && drawn(), 'a sold position');
+  check('the picker leads to the sold position', doc().querySelector('[data-act="position"]').value === sold.value);
+  const soldTiles = [...doc().querySelectorAll('.tiles.six .tile .v')].map((t) => t.textContent);
+  check('a sold position shows no value, only what it booked', soldTiles[1] === '—' && /€/.test(soldTiles[3]));
+
+  // Allocation: the map, a tile read out, the ranked list, the accounts.
+  f.contentWindow.location.hash = '#/allocation';
+  await until(() => doc().querySelector('.map-box .cell'), 'the map');
+  const cells = doc().querySelectorAll('.map-box .cell');
+  check(`a tile for every holding and the cash (${cells.length})`, cells.length === 9);
+  cells[0].querySelector('rect').dispatchEvent(new f.contentWindow.PointerEvent('pointerdown', { bubbles: true }));
+  check('tapping a tile reads it out', /% of the portfolio/.test(doc().querySelector('.map-readout').textContent));
+  check('the ranked list matches the map', doc().querySelectorAll('.ranks li').length === 9);
+  check('the two accounts are split out', /By account/.test(doc().body.textContent) && /Revolut/.test(doc().body.textContent));
+
+  f.contentWindow.location.hash = '#/other-assets';
+  await until(() => doc().querySelector('.asset'), 'the other assets');
+  check('the other assets say where their value comes from', /median asking price across/.test(doc().body.textContent) && /thin market/.test(doc().body.textContent));
+
+  f.contentWindow.location.hash = '#/cash';
+  await until(() => drawn() && /What moved the cash/.test(doc().body.textContent), 'Cash');
+  check('Cash draws its balance and what moved it', doc().querySelectorAll('.dtable tbody tr').length >= 4);
+  tap('cash-recent');
+  check('the recent cash events open', doc().querySelectorAll('.dtable.events tbody tr').length > 20);
+
+  f.contentWindow.location.hash = '#/dividends';
+  await until(() => drawn() && doc().querySelector('.years'), 'Dividends');
+  check('Dividends has its years, its line and its payers', doc().querySelectorAll('.years li').length === 4 && doc().querySelectorAll('.dtable tbody tr').length === 3);
+
+  f.contentWindow.location.hash = '#/realized';
+  await until(() => doc().querySelector('.hrow.booked'), 'Realized');
+  const booked = doc().querySelectorAll('.hrow.booked');
+  check(`every position with a booked result (${booked.length}), the partly sold one striped`, booked.length === 5 && doc().querySelectorAll('.bar.partly').length === 1);
+  booked[0].click();
+  check('a booked position opens to its trades and fees', /First trade/.test(doc().querySelector('.holding.open .detail').textContent));
+
+  // Figures from an engine run before these screens existed: a sentence each.
+  await open('../src/index.html?demo=old#/allocation');
+  await until(() => doc().querySelector('.note-card'), 'the older figures');
+  check('older figures say the screen comes with the next run', /next run of the cloud engine/.test(doc().querySelector('.note-card').textContent));
+  for (const screen of ['position', 'other-assets', 'cash', 'dividends', 'realized']) {
+    f.contentWindow.location.hash = `#/${screen}`;
+    await until(() => doc().querySelector(`.tabs a.on[href="#/${screen}"]`), screen);
+    check(`${screen} says so too`, /next run of the cloud engine/.test(doc().querySelector('.note-card').textContent));
+  }
 } catch (e) {
   log.push({ name: e.message, ok: false });
 }

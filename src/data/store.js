@@ -6,6 +6,8 @@
 //
 // Dev switches in the URL. None of them touches this device's real copy:
 //   ?demo     made-up figures (tools/make_demo.py)
+//   ?demo=old the same, as an engine from before the other screens sent
+//             them: main and series only (the smoke test checks the sentences)
 //   ?local    the tracker's own figures on this laptop, as its engine last
 //             wrote them (tools/serve.py serves them; never copied here)
 //   ?reset    forget this device's copy first
@@ -31,27 +33,46 @@ export const syncStatus = () => status;
 export const subscribe = (fn) => subscribers.add(fn);
 const setStatus = (next) => { status = next; emit(); };
 
-// `raw` is { main: { json }, series: { json } }, or the documents themselves.
+// `raw` is { main: { json }, series: { json }, screens, prices-1 … }, or the
+// documents themselves. Only main and series have to be there.
 function accept(raw) {
   const read = readDocuments(raw);
   if (read.problem) return read.problem;
-  docs = { main: read.main, series: prepare(read.series) };
+  docs = { main: read.main, series: prepare(read.series), screens: read.screens, prices: read.prices };
   return null;
+}
+
+// The tracker's own engine output on this laptop (?local): main and series,
+// then whatever newer documents that run wrote. An engine from before the
+// other screens wrote none, and those screens say so.
+async function localDocuments() {
+  const fetchDoc = (name) => fetch(`/__local/${name}.json`).then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  });
+  const optional = (name) => fetchDoc(name).catch(() => null);
+  const [main, series, screens, first] = await Promise.all(
+    [fetchDoc('main'), fetchDoc('series'), optional('screens'), optional('prices-1')],
+  );
+  const raw = { main, series };
+  if (screens) raw.screens = screens;
+  if (first) {
+    raw['prices-1'] = first;
+    const rest = await Promise.all(Array.from({ length: first.parts - 1 }, (_, k) => optional(`prices-${k + 2}`)));
+    rest.forEach((p, k) => { if (p) raw[`prices-${k + 2}`] = p; });
+  }
+  return raw;
 }
 
 export async function load() {
   if (source === 'demo') {
-    accept((await import('./demo.js')).DEMO);
+    const { DEMO } = await import('./demo.js');
+    accept(params.get('demo') === 'old' ? { main: DEMO.main, series: DEMO.series } : DEMO);
     return emit();
   }
   if (source === 'local') {
     try {
-      const fetchDoc = (name) => fetch(`/__local/${name}.json`).then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      });
-      const [main, series] = await Promise.all([fetchDoc('main'), fetchDoc('series')]);
-      accept({ main, series });
+      accept(await localDocuments());
       setStatus({ mode: 'off' });
     } catch (e) {
       setStatus({ mode: 'local-missing', error: e.message });

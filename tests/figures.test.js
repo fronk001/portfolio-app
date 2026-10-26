@@ -61,3 +61,34 @@ test('a document from a newer engine is refused, not half-read', () => {
   const read = F.readDocuments({ main: { json: '{"schema_version":1,"a":2}' }, series: { json: '{"dates":[]}' } });
   ok(read.main.a === 2 && Array.isArray(read.series.dates));
 });
+
+test('figures from before the other screens existed still open, without them', () => {
+  const read = F.readDocuments({ main: { json: '{"schema_version":1}' }, series: { json: '{"dates":[]}' } });
+  eq([read.screens, read.prices], [null, null]);
+  const newer = { json: JSON.stringify({ schema_version: F.SCHEMA_VERSION + 1 }) };
+  eq(F.readDocuments({ main: { json: '{}' }, series: { json: '{}' }, screens: newer }), { problem: 'newer' });
+});
+
+test('price histories are joined from their parts, and a stale part is ignored', () => {
+  const part = (part, parts, at, positions) => ({ json: JSON.stringify({ schema_version: 1, generated_at: at, part, parts, positions }) });
+  const read = F.readDocuments({
+    main: { json: '{}' },
+    series: { json: '{}' },
+    'prices-1': part(1, 2, '2026-10-26T12', { A: 'a new', B: 'b' }),
+    'prices-2': part(2, 2, '2026-10-26T12', { C: 'c' }),
+    'prices-3': part(3, 3, '2026-10-25T12', { D: 'gone', A: 'a old' }), // an older run needed three
+  });
+  eq(read.prices, { A: 'a new', B: 'b', C: 'c' });
+});
+
+test('a price history is read back from its first date and gaps', () => {
+  const h = F.priceHistory({ from: '2026-10-22', gaps: [1, 4], values: [1, 2, 3] });
+  eq(h.days.map(F.dayString), ['2026-10-22', '2026-10-23', '2026-10-27']);
+  eq(F.dailyDays({ from: '2026-12-31', values: [1, 2] }).map(F.dayString), ['2026-12-31', '2027-01-01']);
+});
+
+test('trades are marked inside the range only, a priceless day on the next', () => {
+  const h = F.priceHistory({ from: '2026-10-22', gaps: [1, 4, 1], values: [1, 2, 3, 4] });
+  const trades = [['2026-10-21', 1, 9], ['2026-10-24', 2, 9], ['2026-10-28', -3, 9], ['2026-10-29', 1, 9]];
+  eq(F.tradesOnChart(trades, h.days, 1, 3).map((t) => [t.i, t.qty]), [[2, 2], [3, -3]]);
+});

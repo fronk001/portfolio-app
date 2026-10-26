@@ -1,11 +1,13 @@
-// The two screens, as template strings re-rendered whole on every change
-// (the page is small; it takes a few milliseconds). Overview is the
-// Streamlit app's Overview: the header, the performance chart with the same
-// ranges, metrics and return methods, and the quarterly grid. Holdings is its
-// holdings table, as rows a thumb can open.
+// The page around every screen, and the first two screens, as template
+// strings re-rendered whole on every change (the page is small; it takes a
+// few milliseconds). Overview is the Streamlit app's Overview: the header,
+// the performance chart with the same ranges, metrics and return methods,
+// and the quarterly grid. Holdings is its holdings table, as rows a thumb can
+// open. The other six Portfolio screens are in screens.js.
 //
-// Each view returns { html, chart }: the chart is drawn into its box after
-// the page is in place (ui/chart.js), because it is sized to the box.
+// Each view returns { html, chart, map }: a chart or the Allocation map is
+// drawn into its box after the page is in place (ui/chart.js), because it is
+// sized to the box.
 
 import * as F from '../core/figures.js';
 import {
@@ -13,21 +15,27 @@ import {
 } from '../core/format.js';
 import { source } from '../data/store.js';
 import { accountLine, syncButton } from './account.js';
-import { CHEVRON, esc, plural } from './html.js';
+import { CHEVRON, TRACKER_URL, esc, pills, plural, signedClass } from './html.js';
+import * as S from './screens.js';
 
 // The tracker's chart colours, so the two apps read the same.
 const BLUE = '#2a78d6';
 const ORANGE = '#eb6834';
 
 export const NO_BENCHMARK = 'Nothing — portfolio only';
-export const TRACKER_URL = 'https://portfolio-tracker-fronk.streamlit.app/';
 
-const pills = (act, options, current, label) => `
-  <div class="pills" role="group" aria-label="${label}">${options.map((o) => `
-    <button class="pill${o === current ? ' on' : ''}" data-act="${act}" data-v="${esc(o)}" aria-pressed="${o === current}">${esc(o)}</button>`).join('')}
-  </div>`;
-
-const signedClass = (v) => `class="${tone(v)}"`;
+// Every screen: its route, its tab, its address. The Streamlit app's
+// Portfolio sections in its order, less Log a trade, which changes figures.
+export const SCREENS = [
+  ['overview', 'Overview', '#/'],
+  ['holdings', 'Holdings', '#/holdings'],
+  ['position', 'Position', '#/position'],
+  ['allocation', 'Allocation', '#/allocation'],
+  ['other-assets', 'Other assets', '#/other-assets'],
+  ['cash', 'Cash', '#/cash'],
+  ['dividends', 'Dividends', '#/dividends'],
+  ['realized', 'Realized', '#/realized'],
+];
 
 // ---- shared ------------------------------------------------------------
 
@@ -39,9 +47,8 @@ function shell(route, d, st, ui, body) {
   <div class="page">
     ${syncButton(st, ui.syncOpen)}
     ${hero(d.main)}
-    <nav class="tabs" aria-label="Screens">
-      <a href="#/" class="${route === 'overview' ? 'on' : ''}">Overview</a>
-      <a href="#/holdings" class="${route === 'holdings' ? 'on' : ''}">Holdings</a>
+    <nav class="tabs" aria-label="Screens">${SCREENS.map(([r, label, href]) => `
+      <a href="${href}"${r === route ? ' class="on" aria-current="page"' : ''}>${label}</a>`).join('')}
     </nav>
     ${body}
     ${facts(d.main)}
@@ -261,6 +268,7 @@ function holdingDetail(h) {
     ${row('Share of the total', h.weight_pct == null ? '—' : `${h.weight_pct.toFixed(1)}%`)}
     ${row('Account', esc(h.broker))}
     ${h.price_as_of ? row('Priced at', `the close of ${shortDate(h.price_as_of)}`) : ''}
+    <div class="wide-row"><a href="#/position/${esc(h.isin)}">Price chart, trades and dividends →</a></div>
   </dl>`;
 }
 
@@ -300,7 +308,18 @@ function holdings(d, ui) {
   };
 }
 
+const VIEWS = {
+  overview,
+  holdings,
+  position: S.position,
+  allocation: S.allocation,
+  'other-assets': S.otherAssets,
+  cash: S.cash,
+  dividends: S.dividends,
+  realized: S.realized,
+};
+
 export function renderPage(route, d, ui, st) {
-  const view = route === 'holdings' ? holdings(d, ui) : overview(d, ui);
-  return { html: shell(route, d, st, ui, view.html), chart: view.chart };
+  const view = (VIEWS[route] || overview)(d, ui);
+  return { html: shell(route, d, st, ui, view.html), chart: view.chart || null, map: view.map || null };
 }

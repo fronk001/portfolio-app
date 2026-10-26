@@ -5,7 +5,10 @@
 // tests/contract.test.js holds them to the tracker's answers on the demo
 // figures (tools/make_demo.py), so this cannot quietly disagree with the
 // Streamlit app. Money % is not here: a rate solved at every point is the
-// engine's job, and arrives finished per fixed range.
+// engine's job, and arrives finished per fixed range. Neither is anything on
+// the other screens (Position detail to Realized): those figures arrive
+// finished, and all that is done here is to read them and cut a price chart
+// to its range.
 //
 // Pure: no DOM, no storage. Days are UTC-midnight milliseconds.
 
@@ -56,14 +59,63 @@ export function rangeStart(choice, days) {
 // The documents as Firestore (or the cache) holds them: each one a JSON
 // string. A document from a newer engine than this app understands is
 // reported rather than half-read.
+//
+// `screens` and the `prices-N` parts came later (26 Oct 2026), so a device
+// can hold figures from an engine run that had none: they are null then, and
+// the screens that need them say so in a sentence.
 export function readDocuments(raw) {
   if (!raw || !raw.main || !raw.series) return { problem: 'missing' };
   const parse = (d) => (typeof d.json === 'string' ? JSON.parse(d.json) : d);
   const main = parse(raw.main);
   const series = parse(raw.series);
-  const newer = [main, series].some((d) => (d.schema_version || 0) > SCHEMA_VERSION);
+  const screens = raw.screens ? parse(raw.screens) : null;
+  const parts = Object.keys(raw).filter((k) => /^prices-\d+$/.test(k)).map((k) => parse(raw[k]));
+  const newer = [main, series, screens, ...parts].some((d) => d && (d.schema_version || 0) > SCHEMA_VERSION);
   if (newer) return { problem: 'newer' };
-  return { main, series };
+  return { main, series, screens, prices: joinPrices(parts) };
+}
+
+// Each position's price history, from however many parts the engine split
+// them into. Every part says how many there are, and the newest run's count
+// holds, so a part left over from a run that needed more is ignored. Where
+// two runs both carry a holding, the newer copy wins.
+export function joinPrices(parts) {
+  if (!parts.length) return null;
+  const byAge = [...parts].sort((a, b) => (a.generated_at < b.generated_at ? -1 : a.generated_at > b.generated_at ? 1 : 0));
+  const count = byAge[byAge.length - 1].parts;
+  const out = {};
+  for (const p of byAge) if (p.part <= count) Object.assign(out, p.positions);
+  return out;
+}
+
+// A price history as the engine sends it — its first date, then the days
+// from each price to the next — as days and prices.
+export function priceHistory(entry) {
+  const days = [parseDay(entry.from)];
+  for (const gap of entry.gaps) days.push(days[days.length - 1] + gap * DAY);
+  return { days, values: entry.values };
+}
+
+// A line with one value per calendar day, sent as { from, values }: its days.
+export function dailyDays(line) {
+  const start = parseDay(line.from);
+  return line.values.map((_, i) => start + i * DAY);
+}
+
+// The trades a price chart's window shows — `[date, shares, price]`, shares
+// negative for a sale — the app's markers, filtered to the window as its are.
+// Each is placed on the first day of the window on or after its date, so a
+// trade on a day with no price lands on the next one.
+export function tradesOnChart(trades, days, first, last) {
+  const out = [];
+  for (const [date, qty, px] of trades) {
+    const day = parseDay(date);
+    if (day < days[first] || day > days[last]) continue;
+    let i = first;
+    while (i < last && days[i] < day) i++;
+    out.push({ i, date, qty, px });
+  }
+  return out;
 }
 
 // The series with its days as numbers, kept beside the document.

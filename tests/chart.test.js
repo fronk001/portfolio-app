@@ -1,5 +1,7 @@
 import { test, eq, ok } from './harness.js';
-import { dateTicks, extent, linePath, nearestIndex, niceTicks } from '../src/core/chart.js';
+import {
+  areaPath, dateTicks, extent, inkOn, linePath, nearestIndex, niceTicks, pnlColour, squarify,
+} from '../src/core/chart.js';
 
 test('gridlines land on round numbers and cover the data', () => {
   const t = niceTicks(58123, 61442);
@@ -33,4 +35,29 @@ test('the nearest point to a finger', () => {
 test('date labels include both ends', () => {
   eq(dateTicks(8, 4), [0, 2, 4, 5, 7]);
   eq(dateTicks(2, 4), [0, 1]);
+});
+
+test('the area under a line closes on the zero line, and breaks at gaps', () => {
+  eq(areaPath([1, 2, null, 3], (i) => i, (v) => v, 0), 'M0.0 0.0L0.0 1.0L1.0 2.0L1.0 0.0Z');
+});
+
+test('map tiles fill the box, each sized by its share', () => {
+  const values = [40, 25, 15, 10, 6, 3, 1, 0];
+  const rects = squarify(values, 0, 0, 300, 200);
+  eq(rects.length, values.length);
+  const area = (r) => r.w * r.h;
+  ok(Math.abs(rects.reduce((a, r) => a + area(r), 0) - 60000) < 1e-6, 'the whole box is used');
+  rects.forEach((r, k) => {
+    ok(Math.abs(area(r) - (values[k] / 100) * 60000) < 1e-6, `tile ${k} has its share`);
+    ok(r.x >= -1e-9 && r.y >= -1e-9 && r.x + r.w <= 300 + 1e-6 && r.y + r.h <= 200 + 1e-6, `tile ${k} stays inside`);
+  });
+  ok(rects.slice(0, 3).every((r) => Math.max(r.w / r.h, r.h / r.w) < 3), 'the large tiles are near square');
+  eq(squarify([0, 0], 0, 0, 10, 10), [{ x: 0, y: 0, w: 0, h: 0 }, { x: 0, y: 0, w: 0, h: 0 }]);
+});
+
+test('map colours run red, off-white, green, and hold past ±40%', () => {
+  eq([pnlColour(-40), pnlColour(-90), pnlColour(0), pnlColour(null), pnlColour(40), pnlColour(400)],
+    ['#d03b3b', '#d03b3b', '#f0efec', '#f0efec', '#0ca30c', '#0ca30c']);
+  eq(pnlColour(20), '#7ec97c');
+  eq([inkOn('#f0efec'), inkOn('#0ca30c'), inkOn('#d03b3b')], ['#1E1D1A', '#FFFFFF', '#FFFFFF']);
 });

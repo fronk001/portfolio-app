@@ -1,23 +1,27 @@
 // Boot: draw this device's copy of the figures straight away, then let the
-// newest ones arrive in the background. Two screens by address (#/ the
-// Overview, #/holdings), so the app comes back where it was left.
+// newest ones arrive in the background. Every screen has an address (#/ the
+// Overview, #/holdings, #/position/<ISIN>, #/cash …; views.js's SCREENS), so
+// the app comes back where it was left.
 
 import * as F from '../core/figures.js';
 import { get, load, startSync, subscribe, sync, syncStatus } from '../data/store.js';
 import { closeSignIn, gate, openSignIn, signInForced, signInOpen } from './account.js';
-import { drawChart } from './chart.js';
-import { renderPage } from './views.js';
+import { drawChart, drawMap } from './chart.js';
+import { SCREENS, renderPage } from './views.js';
 
 const root = document.getElementById('app');
 
 // The chart opens on the last week (Fred, 26 Oct 2026), on value, and with
 // the time-weighted return beside the S&P 500 when switched to Return % —
-// as the Streamlit app's Overview does.
+// as the Streamlit app's Overview does. Position detail's price chart opens
+// on three months, as the app's does: a week of one share price says little.
 const ui = {
   range: '1W', metric: 'Value', method: F.TIME, bench: 'S&P 500',
   custom: null, open: null, syncOpen: false,
+  posRange: '3M', posCustom: null, cashRecent: false,
 };
 let chart = null;
+let map = null;
 
 // The same choices from the address, for a bookmark and for the screenshot
 // and smoke-test tools: ?range=1Y&metric=Return %25&method=Simple %25.
@@ -27,7 +31,12 @@ if (F.METRICS.includes(asked.get('metric'))) ui.metric = asked.get('metric');
 if (F.METHODS.includes(asked.get('method'))) ui.method = asked.get('method');
 if (asked.get('bench')) ui.bench = asked.get('bench');
 
-const route =() => (location.hash.replace(/^#\/?/, '') === 'holdings' ? 'holdings' : 'overview');
+// #/position/<ISIN> opens Position detail on that holding.
+function route() {
+  const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
+  ui.pos = name === 'position' && arg ? decodeURIComponent(arg) : ui.pos;
+  return SCREENS.some(([r]) => r === name) ? name : 'overview';
+}
 
 function render() {
   const d = get();
@@ -37,17 +46,21 @@ function render() {
   if (!d) {
     root.innerHTML = gate(st);
     chart = null;
+    map = null;
     return;
   }
   const page = renderPage(route(), d, ui, st);
   root.innerHTML = page.html;
   chart = page.chart;
+  map = page.map;
   drawCharts();
 }
 
 function drawCharts() {
   const box = root.querySelector('.chart-box');
   if (box && chart) drawChart(box, chart);
+  const mapBox = root.querySelector('.map-box');
+  if (mapBox && map) drawMap(mapBox, map);
 }
 
 // Custom opens on the last three months, a range worth adjusting from.
@@ -67,7 +80,12 @@ root.addEventListener('click', (e) => {
       break;
     case 'metric': ui.metric = v; break;
     case 'method': ui.method = v; break;
+    case 'pos-range':
+      ui.posRange = v;
+      ui.posCustom = null; // Custom opens on the last three months again
+      break;
     case 'holding': ui.open = ui.open === v ? null : v; break;
+    case 'cash-recent': ui.cashRecent = !ui.cashRecent; break;
     case 'sync': ui.syncOpen = !ui.syncOpen; break;
     case 'sign-in': openSignIn(); return;
     case 'sign-out': sync.signOut(); return;
@@ -82,6 +100,15 @@ root.addEventListener('change', (e) => {
   else if (act === 'custom-from' || act === 'custom-to') {
     if (!e.target.value) return; // cleared halfway through choosing
     ui.custom = { ...ui.custom, [act === 'custom-from' ? 'from' : 'to']: F.parseDay(e.target.value) };
+  } else if (act === 'pos-from' || act === 'pos-to') {
+    const from = root.querySelector('[data-act="pos-from"]').value;
+    const to = root.querySelector('[data-act="pos-to"]').value;
+    if (!from || !to) return;
+    ui.posCustom = { from: F.parseDay(from), to: F.parseDay(to) };
+  } else if (act === 'position') {
+    ui.posCustom = null;
+    location.hash = `#/position/${encodeURIComponent(e.target.value)}`;
+    return; // hashchange draws it
   } else return;
   render();
 });

@@ -8,8 +8,8 @@ Sends Cache-Control: no-store on everything. Without it the browser keeps
 serving stale ES modules after an edit, and a test run can quietly pass
 against code that is no longer on disk. (Learned in the Mongolian project.)
 
-/__local/main.json and /__local/series.json are the tracker's own figures, as
-its engine last wrote them on this laptop:
+/__local/<name>.json (main, series, screens, prices-1 …) are the tracker's own
+figures, as its engine last wrote them on this laptop:
 
     cd "../Portfolio tracker" && .venv\\Scripts\\python.exe -m src.engine --out data\\engine
 
@@ -17,6 +17,7 @@ That is what `?local` shows: your real numbers, before (or without) Firebase.
 They are read from the tracker's folder, never copied into this one, which
 is published.
 """
+import re
 import sys
 import time
 import webbrowser
@@ -58,8 +59,9 @@ class Handler(SimpleHTTPRequestHandler):
         if Handler.offline and self.path.startswith("/dist/"):
             self.send_error(503, "Pretend offline (tools/sw-check.html)")
             return
-        if self.path.split("?")[0] in ("/__local/main.json", "/__local/series.json"):
-            path = ENGINE_OUT / self.path.split("?")[0].rsplit("/", 1)[1]
+        local = re.fullmatch(r"/__local/([a-z0-9-]+\.json)", self.path.split("?")[0])
+        if local:
+            path = ENGINE_OUT / local.group(1)
             if not path.is_file():
                 self.send_error(404, "No engine output yet: run the tracker's engine with --out data\\engine")
                 return

@@ -63,6 +63,35 @@ test('every range starts where pandas says, on the awkward days too', () => {
   }
 });
 
+// Position detail: the price histories, read back from their parts and gaps,
+// cut to each range where the app's range_start cuts them.
+const docs = F.readDocuments(DEMO);
+
+test('every price history comes back, joined from its parts', () => {
+  ok(EXPECTED.price_parts > 1, 'the demo comes in parts, so the joining is tested');
+  eq(Object.keys(docs.prices).sort(), EXPECTED.priced);
+});
+
+for (const [isin, ranges] of Object.entries(EXPECTED.positions)) {
+  test(`Position detail ${isin}: every range covers the app's days and trades`, () => {
+    const pos = docs.screens.positions.find((p) => p.isin === isin);
+    const history = F.priceHistory(docs.prices[isin]);
+    for (const [choice, want] of Object.entries(ranges)) {
+      const w = F.rangeWindow(history, choice);
+      eq([F.dayString(history.days[w.first]), F.dayString(history.days[w.last]), w.last - w.first + 1],
+        [want.first, want.last, want.points], choice);
+      ok(close(history.values[w.first], want.first_price), `${choice} first price`);
+      eq(F.tradesOnChart(pos.trades, history.days, w.first, w.last).length, want.trades, `${choice} trades`);
+    }
+  });
+}
+
+test('the daily lines (Cash, dividends) end where the engine says', () => {
+  const lastOf = (line) => F.dayString(F.dailyDays(line).at(-1));
+  eq([lastOf(docs.screens.cash.history), lastOf(docs.screens.dividends.cumulative)],
+    [EXPECTED.daily_last.cash, EXPECTED.daily_last.dividends]);
+});
+
 test('Money % comes from the engine, laid over its own range', () => {
   for (const choice of F.FIXED) {
     const w = F.rangeWindow(s, choice);
