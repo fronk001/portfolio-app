@@ -33,8 +33,7 @@ Single user, non-technical: explain things plainly, in prose.
   Runway. Both charts share one window, 3M to All, opening on 1Y as the
   tracker's; Custom links to the tracker. Checked on Fred's real figures via
   `?local`.
-- ✅ Built and tested later that evening (pushed once Fred says yes; see git
-  log): **Budget**, all six of the tracker's screens in its order — Right
+- ✅ Live from later that evening (`aa7be66`): **Budget**, all six of the tracker's screens in its order — Right
   now, Savings, Month, Yearly overview, Forecast, Pockets — from the engine's
   `budget` and `budget-months` documents. The switch at the top is now
   Portfolio / Budget / Wealth, the tracker's front-door order, one tap each,
@@ -44,9 +43,14 @@ Single user, non-technical: explain things plainly, in prose.
   pocket arrives finished. Checked on Fred's real figures via `?local` (every
   window, month, year and pocket drawn: 162 states, no error).
 - The plan Fred accepted on 26 Oct, toward every screen he reads: (1) the
-  rest of Portfolio ✅; (2) Wealth ✅; (3) Budget ✅; (4) point Life Hub's
-  Portfolio launcher (`../life-hub/src/portfolio/`, which redirects to
-  Streamlit today) and its `seed.local.js` tracker link here.
+  rest of Portfolio ✅; (2) Wealth ✅; (3) Budget ✅; (4) Life Hub's
+  Portfolio launchers point here ✅ (Life Hub `0e62253`, live once that repo
+  is pushed on Fred's yes; its git log says whether it has been). Its money
+  review's Portfolio tracker button opens this app (migrate step 8; on the
+  phone in Safari itself), and the old home-screen launcher at
+  `/life-hub/portfolio/` forwards here, so a shortcut added from it lands
+  here too. This app's own icon is still the better one (full screen, its
+  own sign-in kept), as section 3 of SETUP.md says.
 - Not built: Money % against a benchmark (the engine would have to solve it;
   the screen says so), a Wealth window of your own (Custom: too many to work
   out ahead; each screen links to the tracker's). Log a trade, imports, the

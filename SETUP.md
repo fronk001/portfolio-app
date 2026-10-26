@@ -39,6 +39,7 @@ holds no figures: they stay in Firebase, behind your sign-in.
 From then on it opens straight onto your figures, with or without a
 connection, and swaps in newer ones by itself.
 
-If the old Portfolio icon (the one that opens Streamlit) is still on your
-home screen, you can remove it once this one works; the full tracker stays
-one tap away at the bottom of the new app.
+If the old gold Portfolio icon (the one that used to open Streamlit) is
+still on your home screen, you can remove it once this one works. Since
+26 Oct 2026 it opens this app too, but with Safari's bar or a sign-in of
+its own. The full tracker stays one tap away at the bottom of the new app.
