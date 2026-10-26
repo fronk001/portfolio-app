@@ -36,6 +36,24 @@ export function extent(lists) {
   return min === Infinity ? [0, 1] : [min, max];
 }
 
+// A level per slot, joined by risers: a monthly budget that steps when the
+// budget changed. Each value runs the width of its slot from `left(i)`, and
+// a gap (null) breaks the line, as plotly's connectgaps=False does.
+export function stepPath(values, left, width, y) {
+  let d = '';
+  let pen = false;
+  values.forEach((v, i) => {
+    if (v == null || !Number.isFinite(v)) {
+      pen = false;
+      return;
+    }
+    const at = y(v).toFixed(1);
+    d += `${pen ? 'L' : 'M'}${left(i).toFixed(1)} ${at}L${(left(i) + width).toFixed(1)} ${at}`;
+    pen = true;
+  });
+  return d;
+}
+
 // An SVG path through the points, broken where a value is missing, so a
 // gap reads as a gap rather than as a straight line across it.
 export function linePath(values, x, y) {

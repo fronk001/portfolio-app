@@ -5,7 +5,7 @@
 // instantly and work offline, and this is a few dozen lines each.
 
 import {
-  areaPath, dateTicks, extent, inkOn, linePath, nearestIndex, nearestOf, niceTicks, slotIndex, squarify,
+  areaPath, dateTicks, extent, inkOn, linePath, nearestIndex, nearestOf, niceTicks, slotIndex, squarify, stepPath,
 } from '../core/chart.js';
 import { esc } from './html.js';
 
@@ -116,7 +116,13 @@ export function drawChart(box, spec) {
 // draws them: two separate quantities, each measured from zero. A month
 // still running is drawn faded. A finger on a month reads the pair out.
 //
-// spec: { days: [ms], series: [{ values, color }], faded: [boolean],
+// Budget's charts are one bar a month with a line across them: a month's
+// bar coloured by itself (`colors`, the tracker's own per bar), and the
+// budget or the running total drawn through the middle of each month, or
+// stepping across it (`step`) where the budget changed during the year.
+//
+// spec: { days: [ms], series: [{ values, color, colors }], faded: [boolean],
+//         lines: [{ values, color, dash, step }],
 //         yLabel(v, step), xLabel(ms), readout(i) -> html, label }
 export function drawBars(box, spec) {
   const w = Math.max(240, Math.round(box.clientWidth));
@@ -124,8 +130,10 @@ export function drawBars(box, spec) {
   const n = spec.days.length;
   const plotW = w - PAD.left - PAD.right;
   const plotH = h - PAD.top - PAD.bottom;
+  const lines = spec.lines || [];
+  const faded = spec.faded || [];
 
-  let [min, max] = extent(spec.series.map((s) => s.values));
+  let [min, max] = extent([...spec.series.map((s) => s.values), ...lines.map((l) => l.values)]);
   min = Math.min(min, 0);
   max = Math.max(max, 0);
   const { lo, hi, ticks, step } = niceTicks(min, max, w < 600 ? 3 : 4);
@@ -147,14 +155,19 @@ export function drawBars(box, spec) {
   const bars = spec.series.map((s, k) => s.values.map((v, i) => {
     if (v == null || !Number.isFinite(v)) return '';
     const top = Math.min(y(v), zero);
-    return `<rect class="bar" x="${(left(i) + k * bar).toFixed(1)}" y="${top.toFixed(1)}" width="${Math.max(0.6, bar - 0.6).toFixed(1)}" height="${Math.max(0.6, Math.abs(y(v) - zero)).toFixed(1)}" fill="${s.color}"${spec.faded[i] ? ' fill-opacity="0.45"' : ''}/>`;
+    return `<rect class="bar" x="${(left(i) + k * bar).toFixed(1)}" y="${top.toFixed(1)}" width="${Math.max(0.6, bar - 0.6).toFixed(1)}" height="${Math.max(0.6, Math.abs(y(v) - zero)).toFixed(1)}" fill="${(s.colors && s.colors[i]) || s.color}"${faded[i] ? ' fill-opacity="0.45"' : ''}/>`;
   }).join('')).join('');
+  const middle = (i) => PAD.left + (i + 0.5) * slot;
+  const paths = lines.map((l) => `<path class="over" d="${l.step
+    ? stepPath(l.values, (i) => PAD.left + i * slot, slot, y)
+    : linePath(l.values, middle, y)}" fill="none" stroke="${l.color}" stroke-width="2"${l.dash ? ` stroke-dasharray="${l.dash}"` : ''} stroke-linejoin="round" stroke-linecap="round"/>`).join('');
 
   box.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${spec.label || 'Chart'}">
     ${grid}${dates}
     <rect class="slot" y="${PAD.top}" height="${plotH}" width="${slot.toFixed(1)}"/>
     ${bars}
     <line class="grid zero" x1="${PAD.left}" x2="${PAD.left + plotW}" y1="${zero.toFixed(1)}" y2="${zero.toFixed(1)}"/>
+    ${paths}
   </svg>`;
 
   const svg = box.firstElementChild;

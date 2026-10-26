@@ -1,6 +1,7 @@
 import { test, eq, ok } from './harness.js';
 import {
   areaPath, dateTicks, extent, inkOn, linePath, nearestIndex, nearestOf, niceTicks, pnlColour, slotIndex, squarify,
+  stepPath,
 } from '../src/core/chart.js';
 
 test('gridlines land on round numbers and cover the data', () => {
@@ -19,6 +20,12 @@ test('a flat series still gets a scale', () => {
 test('gaps break the line rather than bridging it', () => {
   const d = linePath([1, null, 3, 4], (i) => i, (v) => v);
   eq(d, 'M0.0 1.0M2.0 3.0L3.0 4.0');
+});
+
+test('a monthly budget steps across each slot and breaks where there is none', () => {
+  // slots 10 wide from 0: the budget runs 90, 90, 400, then none, then 400
+  const d = stepPath([90, 90, 400, null, 400], (i) => i * 10, 10, (v) => v);
+  eq(d, 'M0.0 90.0L10.0 90.0L10.0 90.0L20.0 90.0L20.0 400.0L30.0 400.0M40.0 400.0L50.0 400.0');
 });
 
 test('extent ignores gaps', () => {

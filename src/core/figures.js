@@ -60,10 +60,10 @@ export function rangeStart(choice, days) {
 // string. A document from a newer engine than this app understands is
 // reported rather than half-read.
 //
-// `screens` and the `prices-N` parts came later (26 Oct 2026), and `wealth`
-// later that evening, so a device can hold figures from an engine run that
-// had none: they are null then, and the screens that need them say so in a
-// sentence.
+// `screens` and the `prices-N` parts came later (26 Oct 2026), `wealth`
+// later that evening and `budget` with `budget-months` later still, so a
+// device can hold figures from an engine run that had none: they are null
+// then, and the screens that need them say so in a sentence.
 export function readDocuments(raw) {
   if (!raw || !raw.main || !raw.series) return { problem: 'missing' };
   const parse = (d) => (typeof d.json === 'string' ? JSON.parse(d.json) : d);
@@ -71,10 +71,13 @@ export function readDocuments(raw) {
   const series = parse(raw.series);
   const screens = raw.screens ? parse(raw.screens) : null;
   const wealth = raw.wealth ? parse(raw.wealth) : null;
+  const budget = raw.budget ? parse(raw.budget) : null;
+  const budgetMonths = raw['budget-months'] ? parse(raw['budget-months']) : null;
   const parts = Object.keys(raw).filter((k) => /^prices-\d+$/.test(k)).map((k) => parse(raw[k]));
-  const newer = [main, series, screens, wealth, ...parts].some((d) => d && (d.schema_version || 0) > SCHEMA_VERSION);
+  const newer = [main, series, screens, wealth, budget, budgetMonths, ...parts]
+    .some((d) => d && (d.schema_version || 0) > SCHEMA_VERSION);
   if (newer) return { problem: 'newer' };
-  return { main, series, screens, wealth, prices: joinPrices(parts) };
+  return { main, series, screens, wealth, budget, budgetMonths, prices: joinPrices(parts) };
 }
 
 // Each position's price history, from however many parts the engine split

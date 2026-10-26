@@ -75,7 +75,7 @@ export function facts(w, main) {
   if (e && e.available) {
     lines.push(`Your wealth workbook as your PC published it on ${stampText(e.published_at)}. The PC sends it, and your Numbers sheets, each day at 19:00.`);
   }
-  lines.push(`Imports, Budget and windows of your own: <a href="${TRACKER_URL}?app=wealth" target="_blank" rel="noopener">open the full tracker</a>.`);
+  lines.push(`Imports and windows of your own: <a href="${TRACKER_URL}?app=wealth" target="_blank" rel="noopener">open the full tracker</a>.`);
   return `<footer class="facts">${lines.map((l) => `<p>${l}</p>`).join('')}</footer>`;
 }
 

@@ -4,9 +4,11 @@
      choice, the Holdings screen and a holding, then each of the other six
      screens (a position's ranges and a sold one, the map, cash events, the
      booked results), then the switch to Wealth and its three screens at
-     every window — and checks each draws (or says why not) without an
+     every window, then the Budget's six screens at every window, month,
+     year and pocket — and checks each draws (or says why not) without an
      error. Last, the same screens on figures from an engine run before they
-     existed (?demo=old), which must each say so in a sentence.
+     existed (?demo=old), and on a run that could not work Wealth and the
+     Budget out (?demo=problem), which must each say so in a sentence.
      Run with: py tools/run_tests.py tools/smoke.html -->
 <html lang="en">
 <head><meta charset="utf-8"><title>Smoke test</title></head>
@@ -15,6 +17,8 @@
 <iframe id="f" title="app" style="width:390px;height:1400px;border:0"></iframe>
 <script type="module">
 import { DEMO } from '../src/data/demo.js';
+
+const BUDGET = ['right-now', 'budget-savings', 'month', 'yearly', 'forecast', 'pockets'];
 
 const f = document.getElementById('f');
 const log = [];
@@ -42,6 +46,24 @@ const drawn = () => {
   return path && path.getAttribute('d').length > 20 && doc().querySelector('.readout').textContent.trim();
 };
 const chartOrReason = () => drawn() || (doc().querySelector('.chart-card .empty') || {}).textContent;
+// The Budget's charts: a bar a month, read out above them.
+const barsDrawn = () => doc().querySelector('.bars-box svg rect.bar') && doc().querySelector('.readout').textContent.trim();
+const rects = () => doc().querySelectorAll('.bars-box rect.bar');
+const choose = (act, value) => {
+  const el = doc().querySelector(`[data-act="${act}"]`);
+  if (!el) throw new Error(`no ${act} to choose from`);
+  el.value = value;
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+};
+const options = (act) => [...doc().querySelectorAll(`[data-act="${act}"] option`)].map((o) => o.value);
+// The one figure a Budget screen leads with, as its whole euros.
+const headline = () => doc().querySelector('.lead-figure .headline').textContent.replace(/[^\d]/g, '');
+const whole = (v) => String(Math.round(Math.abs(v)));
+const text = () => doc().body.textContent;
+const touch = (svg, dx) => {
+  const box = svg.getBoundingClientRect();
+  svg.dispatchEvent(new f.contentWindow.PointerEvent('pointerdown', { clientX: box.left + dx, clientY: box.top + 40, bubbles: true, pointerType: 'touch' }));
+};
 async function open(url) {
   await new Promise((r) => { f.addEventListener('load', r, { once: true }); f.src = url; });
   f.contentWindow.addEventListener('error', (e) => errors.push(e.message));
@@ -161,7 +183,7 @@ try {
 
   // Wealth: one tap from any Portfolio screen, its three screens, every window.
   const facades = () => [...doc().querySelectorAll('.facades a')];
-  check('the switch at the top offers Portfolio and Wealth, Portfolio on', facades().map((a) => a.textContent.trim()).join() === 'Portfolio,Wealth' && doc().querySelector('.facades a.on').dataset.facade === 'portfolio');
+  check('the switch at the top offers the three facades in the tracker’s order, Portfolio on', facades().map((a) => a.textContent.trim()).join() === 'Portfolio,Budget,Wealth' && doc().querySelector('.facades a.on').dataset.facade === 'portfolio');
   doc().querySelector('.facades a[data-facade="wealth"]').click();
   await until(() => doc().querySelector('.tabs.three') && drawn(), 'Everything you own');
   const W = DEMO.wealth;
@@ -206,6 +228,114 @@ try {
   await until(() => doc().querySelector('.tabs a.on[href="#/runway"]'), 'back to Wealth');
   check('and back to the Wealth screen it left', true);
 
+  // Budget: one tap from anywhere, its six screens in two rows of three.
+  const B = DEMO.budget;
+  const M = DEMO['budget-months'];
+  doc().querySelector('.facades a[data-facade="budget"]').click();
+  await until(() => doc().querySelector('.tabs.six a.on[href="#/right-now"]') && doc().querySelector('.lead-figure'), 'Right now');
+  const R = B.right_now;
+  check('Budget opens on Right now, with six tabs', doc().querySelectorAll('.tabs a').length === 6 && /One salary in/.test(doc().querySelector('.hero').textContent));
+  check('Right now leads with what is left where money has moved, not budget less spending', headline() === whole(R.left_started_eur) && /left in the categories you have spent in this month/.test(text()) && R.left_started_eur !== R.left_eur);
+  check(`the ${R.rows.length - R.untouched_count} categories spent in are bars, the ${R.untouched_count} untouched listed`, doc().querySelectorAll('.ranks li').length === R.rows.length - R.untouched_count && doc().querySelectorAll('.dtable tbody tr').length === R.untouched_count);
+  check('it says which day of the month it is, and why the two lefts differ', /day 23 of 31/.test(text()) && /4 categories have nothing recorded this month/.test(text()));
+  check('a month that matches its sheet raises no card', !doc().querySelector('.card.prose'));
+  check('the footer says when the PC read the sheets, and what is still in iCloud', /From your Numbers sheets as your PC last read them/.test(doc().querySelector('.facts').textContent) && /online-only in iCloud \(the 2025 savings file\)/.test(doc().querySelector('.facts').textContent));
+
+  doc().querySelector('.tabs a[href="#/budget-savings"]').click();
+  await until(() => barsDrawn() && doc().querySelector('[data-act="budget-window"]'), 'the Budget’s Savings');
+  check('Savings opens on the tracker’s default window, the last 12 months', doc().querySelector('[data-act="budget-window"]').value === 'last12' && B.savings.default === 'last12');
+  check('its dropdown offers every window the tracker’s does', options('budget-window').join() === B.savings.choices.map((c) => c[1]).join());
+  for (const [label, spec] of B.savings.choices) {
+    choose('budget-window', spec);
+    const w = B.savings.windows[spec];
+    const counted = w.saved.filter((v) => v != null).length;
+    const years = new Set(w.months.filter((_, i) => w.saved[i] != null).map((m) => m.slice(0, 4))).size;
+    for (const line of ['Year by year', 'All time']) {
+      tap('budget-line', line);
+      check(`Savings over ${label}, ${line.toLowerCase()}: ${counted} bars, ${line === 'All time' ? 'one line' : 'a line a year'}, its total on top`, barsDrawn()
+        && rects().length === counted && doc().querySelectorAll('.bars-box path.over').length === (line === 'All time' ? 1 : years)
+        && headline() === whole(w.total_saved_eur) && doc().querySelectorAll('.dtable')[0].querySelectorAll('tbody tr').length === w.years.length);
+    }
+  }
+  check('the months whose savings file differs are said and listed', /In 1 of 9 months the Saved column/.test(text()) && doc().querySelectorAll('.dtable')[1].querySelectorAll('tbody tr').length === 1);
+  const atRestSaved = doc().querySelector('.readout').textContent;
+  touch(doc().querySelector('.bars-box svg'), 60);
+  check('touching a month reads out what was put away', doc().querySelector('.readout').textContent !== atRestSaved && /Put away|more went out|Not counted/.test(doc().querySelector('.readout').textContent));
+
+  doc().querySelector('.tabs a[href="#/month"]').click();
+  await until(() => doc().querySelector('[data-act="budget-month"]'), 'Month');
+  check('Month opens on the newest finished month, every month on record offered', doc().querySelector('[data-act="budget-month"]').value === M.default && M.by_month[M.default].state === 'finished' && options('budget-month').join() === M.months.join());
+  tap('month-transactions');
+  for (const period of M.months) {
+    choose('budget-month', period);
+    const x = M.by_month[period];
+    const said = { finished: /(over|under) budget in/, in_progress: /This month is still running/, not_started: /This month has not started yet/ }[x.state];
+    check(`${period}, ${x.state}: ${x.rows.length} categories, ${x.transactions.length} transactions, its figure on top`, doc().querySelectorAll('.ranks li').length === x.rows.length
+      && doc().querySelectorAll('.dtable.tx tbody tr').length === x.transactions.length && said.test(text())
+      && headline() === whole(x.state === 'finished' ? x.diff_eur : x.total_spent_eur));
+    const card = doc().querySelector('.card.prose');
+    const recalc = x.check && x.check.causes.join() === 'not_recalculated';
+    check(`${period}: its sheet ${!x.check || x.check.state === 'match' ? 'matches and says so' : `differs (${x.check.causes}) and says so in a card`}`, !x.check || x.check.state === 'match'
+      ? !card && /Matches your Numbers sheet/.test(text()) : card && card.classList.contains('warn') === !recalc);
+  }
+  choose('budget-month', '2026-03');
+  check('a misspelt category is named, its space shown', /typed as “Groceries·”/.test(text()));
+  choose('budget-month', '2026-08');
+  check('a category the summary lacks is named', /Parking: used for/.test(text()) && /has no row in the summary/.test(text()));
+  choose('budget-month', '2026-05');
+  check('a file saved without recalculating is said gently', /without Numbers recalculating/.test(text()) && !doc().querySelector('.card.prose.warn'));
+  tap('month-transactions');
+  check('the transactions close again', !doc().querySelector('.dtable.tx') && /Show every transaction/.test(text()));
+
+  doc().querySelector('.tabs a[href="#/yearly"]').click();
+  await until(() => barsDrawn() && doc().querySelector('.tabs a.on[href="#/yearly"]'), 'Yearly overview');
+  const O = B.overview;
+  const onRecord = O.spent.filter((v) => v != null).length;
+  check(`Yearly overview: a bar for each of the ${onRecord} months on record, the budget line through them`, rects().length === onRecord && doc().querySelectorAll('.bars-box path.over').length === 1
+    && headline() === whole(O.ytd_diff_eur) && new RegExp(`${O.ytd_diff_eur > 0 ? 'over' : 'under'} budget so far in 2026`).test(text()));
+  const fills = new Set([...rects()].map((r) => r.getAttribute('fill')));
+  const august = O.months.indexOf('2026-08');
+  check('its bars carry the engine’s colours, a month over budget among them', [...fills].every((c) => O.colours.includes(c)) && fills.has(O.colours[august]) && /over/.test(O.verdicts[august]));
+  check('it says which months are blank and which differ from their file', /63 months are blank because no budget file was ever made/.test(text()) && /3 months differ from the total saved/.test(text()));
+  const atRestYear = doc().querySelector('.readout').textContent;
+  touch(doc().querySelector('.bars-box svg'), 60);
+  check('touching a month reads it out in words', doc().querySelector('.readout').textContent !== atRestYear && doc().querySelector('.readout .plain').textContent.trim());
+
+  doc().querySelector('.tabs a[href="#/forecast"]').click();
+  await until(() => doc().querySelector('[data-act="forecast-year"]'), 'Forecast');
+  check('Forecast offers every year begun', options('forecast-year').join() === B.forecast.years.join());
+  for (const year of B.forecast.years) {
+    choose('forecast-year', year);
+    const x = B.forecast.by_year[year];
+    check(`Forecast for ${year}: four figures and ${x.rows.length} categories, ${x.closed ? 'what it came to' : 'projected'}`, doc().querySelectorAll('.tiles .tile').length === 4
+      && doc().querySelectorAll('.dtable tbody tr').length === x.rows.length && (x.closed ? /is finished, so this is what it came to/ : /The projection carries the pace/).test(text()));
+  }
+
+  doc().querySelector('.tabs a[href="#/pockets"]').click();
+  await until(() => barsDrawn() && doc().querySelector('[data-act="pocket-year"]'), 'Pockets');
+  check('Pockets offers every year begun', options('pocket-year').join() === B.pockets.years.join());
+  let lastPocket = null;
+  for (const year of B.pockets.years) {
+    choose('pocket-year', year);
+    const x = B.pockets.by_year[year];
+    check(`Pockets in ${year}: ${x.rows.length} pockets, the most used opened`, doc().querySelectorAll('.ranks li').length === x.rows.length && doc().querySelector('[data-act="pocket-category"]').value === x.rows[0][0]);
+    for (const [category] of x.rows) {
+      choose('pocket-category', category);
+      const p = x.details[category];
+      const measured = p.series.filter((s) => s[1] != null).length;
+      check(`behind ${category} in ${year}: ${measured} months, the budget in dots${p.budget_changed ? ', stepping' : ''}`, barsDrawn() && rects().length === measured
+        && doc().querySelector('.bars-box path.over[stroke-dasharray]') && p.budget_changed === /steps because the budget itself changed/.test(text())
+        && doc().querySelectorAll('.dtable.tx tbody tr').length === p.biggest.length);
+      lastPocket = category;
+    }
+  }
+
+  doc().querySelector('.facades a[data-facade="wealth"]').click();
+  await until(() => doc().querySelector('.tabs a.on[href="#/runway"]'), 'Wealth again');
+  doc().querySelector('.facades a[data-facade="budget"]').click();
+  await until(() => doc().querySelector('.tabs a.on[href="#/pockets"]') && barsDrawn(), 'back to Budget');
+  check('the switch goes back to the Budget screen it left, and the pocket chosen there', doc().querySelector('[data-act="pocket-category"]').value === lastPocket);
+
   // Figures from an engine run before these screens existed: a sentence each.
   await open('../src/index.html?demo=old#/allocation');
   await until(() => doc().querySelector('.note-card'), 'the older figures');
@@ -216,6 +346,29 @@ try {
     check(`${screen} says so too`, /next run of the cloud engine/.test(doc().querySelector('.note-card').textContent));
   }
   check('so does the top of Wealth', /next run of the cloud engine/.test(doc().querySelector('.hero').textContent));
+  for (const screen of BUDGET) {
+    f.contentWindow.location.hash = `#/${screen}`;
+    await until(() => doc().querySelector(`.tabs a.on[href="#/${screen}"]`), screen);
+    check(`${screen} says so too`, /next run of the cloud engine/.test(doc().querySelector('.note-card').textContent));
+  }
+  check('and the top of the Budget', /next run of the cloud engine/.test(doc().querySelector('.hero').textContent));
+
+  // A run that could not work Wealth or the Budget out sends a sentence for
+  // each instead; the Portfolio is untouched.
+  await open('../src/index.html?demo=problem#/right-now');
+  await until(() => doc().querySelector('.note-card'), 'a run that could not work the Budget out');
+  for (const screen of [...BUDGET, 'wealth', 'savings', 'runway']) {
+    f.contentWindow.location.hash = `#/${screen}`;
+    await until(() => doc().querySelector(`.tabs a.on[href="#/${screen}"]`), screen);
+    check(`${screen} says it could not be worked out, and why`, /could not be worked out on the cloud engine’s last run \(ValueError: made up for the demo\)/.test(doc().querySelector('.note-card').textContent));
+  }
+  check('so does the top of Wealth', /could not be worked out/.test(doc().querySelector('.hero').textContent));
+  f.contentWindow.location.hash = '#/right-now';
+  await until(() => doc().querySelector('.tabs a.on[href="#/right-now"]'), 'Right now');
+  check('and the top of the Budget', /could not be worked out/.test(doc().querySelector('.hero').textContent));
+  f.contentWindow.location.hash = '#/';
+  await until(drawn, 'the Overview');
+  check('the Portfolio still draws', drawn());
 } catch (e) {
   log.push({ name: e.message, ok: false });
 }

@@ -3,13 +3,14 @@
 // few milliseconds). Overview is the Streamlit app's Overview: the header,
 // the performance chart with the same ranges, metrics and return methods,
 // and the quarterly grid. Holdings is its holdings table, as rows a thumb can
-// open. The other six Portfolio screens are in screens.js, and Wealth's three
-// in wealth.js.
+// open. The other six Portfolio screens are in screens.js, Budget's six in
+// budget.js and Wealth's three in wealth.js.
 //
-// Portfolio and Wealth are the tracker's facades, and stay apart here too: a
-// switch in the band at the top chooses one, in one tap, and each keeps its
-// own hero, tabs and footer. They count different things (invested capital,
-// and everything owned), so neither's figures are set inside the other's.
+// Portfolio, Budget and Wealth are the tracker's facades, in its front
+// door's order, and stay apart here too: a switch in the band at the top
+// chooses one, in one tap, and each keeps its own hero, tabs and footer. They
+// count different things (invested capital, a month's flow from one salary,
+// and everything owned), so no facade's figures are set inside another's.
 //
 // Each view returns { html, chart, map }: a chart or the Allocation map is
 // drawn into its box after the page is in place (ui/chart.js), because it is
@@ -21,6 +22,7 @@ import {
 } from '../core/format.js';
 import { source } from '../data/store.js';
 import { accountLine, syncButton } from './account.js';
+import * as B from './budget.js';
 import { CHEVRON, TRACKER_URL, esc, pills, plural, signedClass } from './html.js';
 import * as S from './screens.js';
 import * as W from './wealth.js';
@@ -42,20 +44,32 @@ export const SCREENS = [
   ['cash', 'Cash', '#/cash', 'portfolio'],
   ['dividends', 'Dividends', '#/dividends', 'portfolio'],
   ['realized', 'Realized', '#/realized', 'portfolio'],
+  ['right-now', 'Right now', '#/right-now', 'budget'],
+  ['budget-savings', 'Savings', '#/budget-savings', 'budget'],
+  ['month', 'Month', '#/month', 'budget'],
+  ['yearly', 'Yearly overview', '#/yearly', 'budget'],
+  ['forecast', 'Forecast', '#/forecast', 'budget'],
+  ['pockets', 'Pockets', '#/pockets', 'budget'],
   ['wealth', 'Everything you own', '#/wealth', 'wealth'],
   ['savings', 'Savings vs stock gains', '#/savings', 'wealth'],
   ['runway', 'Runway', '#/runway', 'wealth'],
 ];
 
-export const FACADES = [['portfolio', 'Portfolio'], ['wealth', 'Wealth']];
+export const FACADES = [['portfolio', 'Portfolio'], ['budget', 'Budget'], ['wealth', 'Wealth']];
 
 export const facadeOf = (route) => (SCREENS.find(([r]) => r === route) || SCREENS[0])[3];
+
+// Each facade's hero and footer.
+const HEROES = { portfolio: (d) => hero(d.main), budget: (d) => B.hero(d.budget), wealth: (d) => W.hero(d.wealth) };
+const FOOTERS = { portfolio: (d) => facts(d.main), budget: (d) => B.facts(d.budget, d.main), wealth: (d) => W.facts(d.wealth, d.main) };
+// Portfolio's eight tabs are two rows of four, Budget's six two rows of three.
+const TAB_ROWS = { 3: ' three', 6: ' six' };
 
 // ---- shared ------------------------------------------------------------
 
 function shell(route, d, st, ui, body) {
   const badge = source === 'demo' ? '<div class="demo-badge">Demo data</div>'
-    : source === 'local' ? '<div class="demo-badge">This laptop’s figures</div>' : '';
+    : source === 'local' ? '<div class="demo-badge">This laptop</div>' : '';
   const facade = facadeOf(route);
   const tabs = SCREENS.filter((s) => s[3] === facade);
   // Each facade comes back where it was left.
@@ -64,15 +78,15 @@ function shell(route, d, st, ui, body) {
   return `
   ${badge}
   <div class="page">
-    <nav class="facades" aria-label="Portfolio or Wealth">${switcher}
+    <nav class="facades" aria-label="Portfolio, Budget or Wealth">${switcher}
     </nav>
     ${syncButton(st, ui.syncOpen)}
-    ${facade === 'wealth' ? W.hero(d.wealth) : hero(d.main)}
-    <nav class="tabs${tabs.length === 3 ? ' three' : ''}" aria-label="Screens">${tabs.map(([r, label, href]) => `
+    ${HEROES[facade](d)}
+    <nav class="tabs${TAB_ROWS[tabs.length] || ''}" aria-label="Screens">${tabs.map(([r, label, href]) => `
       <a href="${href}"${r === route ? ' class="on" aria-current="page"' : ''}>${label}</a>`).join('')}
     </nav>
     ${body}
-    ${facade === 'wealth' ? W.facts(d.wealth, d.main) : facts(d.main)}
+    ${FOOTERS[facade](d)}
     ${accountLine(st)}
   </div>`;
 }
@@ -109,7 +123,7 @@ function facts(main) {
       return to ? `${esc(b)} complete up to ${shortDate(to)}` : `${esc(b)} up to ${shortDate(main.trades_to[b])}`;
     }).join(' · ')}.`);
   }
-  lines.push(`Imports and Budget: <a href="${TRACKER_URL}" target="_blank" rel="noopener">open the full tracker</a>.`);
+  lines.push(`Imports and edits: <a href="${TRACKER_URL}" target="_blank" rel="noopener">open the full tracker</a>.`);
   return `<footer class="facts">${lines.map((l) => `<p>${l}</p>`).join('')}</footer>`;
 }
 
@@ -338,6 +352,12 @@ const VIEWS = {
   cash: S.cash,
   dividends: S.dividends,
   realized: S.realized,
+  'right-now': B.rightNow,
+  'budget-savings': B.savings,
+  month: B.month,
+  yearly: B.yearly,
+  forecast: B.forecast,
+  pockets: B.pockets,
   wealth: W.everything,
   savings: W.savings,
   runway: W.runway,

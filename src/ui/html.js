@@ -10,7 +10,7 @@ export const plural = (n, one, many = `${one}s`) => (n === 1 ? one : many);
 
 export const CHEVRON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
 
-// The Streamlit tracker: where imports, edits, Budget and Wealth still are.
+// The Streamlit tracker: where imports, edits and Update from Numbers still are.
 export const TRACKER_URL = 'https://portfolio-tracker-fronk.streamlit.app/';
 
 // A row of choices, one of them on.

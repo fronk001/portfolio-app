@@ -26,7 +26,9 @@ The Wealth document is made the same way: a made-up workbook export, monthly
 portfolio summary, savings and runway, put through the engine's own
 `_wealth_blocks`, so every window arrives worked out exactly as the engine
 works it out. The phone works nothing out on Wealth, so tests/expected.js has
-no answers for it; the smoke test taps through it instead.
+no answers for it; the smoke test taps through it instead. Budget's two
+documents likewise: made-up Numbers sheets for 2026, read by the budget
+project's own `Store` and put through the engine's `_budget_blocks`.
 
 Deterministic: the same file every run.
 """
@@ -211,8 +213,9 @@ def build_documents():
     main = build_main(frame, twr, generated_at)
     screens, price_parts, assets = build_screens(frame, main, generated_at, rng)
     wealth = build_wealth(frame, main, assets, generated_at, rng)
+    budget = build_budget(generated_at, rng)
     # in the engine's order: main last
-    return {**price_parts, "screens": screens, "wealth": wealth, "series": series, "main": main}
+    return {**price_parts, "screens": screens, "wealth": wealth, **budget, "series": series, "main": main}
 
 
 # --- the other screens, through the engine's own builders ----------------------
@@ -508,6 +511,184 @@ def build_wealth(frame, main, assets, generated_at, rng):
     )
 
 
+# --- Budget, through the engine's own builders ---------------------------------
+#
+# Made-up Numbers sheets, written as the PC's reader writes `budget/data`,
+# read by the budget project's own `Store` and put through the engine's
+# `_budget_blocks`. Only 2026 and after: the tracker shows any earlier month
+# in its built-in scheme of the household's old categories, whose wording
+# describes the real household, and none of that belongs in a public repo.
+
+#: The made-up sheets' categories, in sheet order, with a monthly budget. Six
+#: are names the annual pockets use (they must be), the rest made up.
+SHEET_CATEGORIES = [
+    ("House payments", 1100), ("Groceries", 450), ("Eating out", 120),
+    ("Home renovations", 150), ("Health insurance", 140), ("Personal items", 60),
+    ("Holiday", 250), ("Home interior", 100), ("Transport", 90),
+    ("Unbudgeted/misc.", 50), ("Clothing", 50), ("Streaming/gaming/etc.", 30), ("Gifts", 40),
+]
+#: From July the sheets gain a category, so the months before it are shown in
+#: their own (older) categories, as the tracker shows a real change.
+ADDED_IN_JULY = ("Pet care", 80)
+#: The year's annual pockets. The tracker files a pocket only under one of its
+#: own category names (`categories.translate_legacy`) and drops any other, so
+#: the demo's made-up everyday categories (Groceries, Eating out, Health
+#: insurance, Transport, Pet care) show as spent with no pocket set.
+POCKETS = {"House payments": 13200, "Unbudgeted/misc.": 600, "Streaming/gaming/etc.": 360,
+           "Holiday": 3000, "Clothing": 600, "Gifts": 400, "Home interior": 1500,
+           "Home renovations": 2000, "Personal items": 500}
+DESCRIPTIONS = {
+    "House payments": ["Mortgage", "Energy bill", "Water bill"],
+    "Groceries": ["Supermarket", "Bakery", "Market stall", "Butcher"],
+    "Eating out": ["Restaurant", "Lunch", "Pizza"],
+    "Home renovations": ["Hardware store", "Painter"],
+    "Health insurance": ["Insurance premium"],
+    "Personal items": ["Pharmacy", "Hairdresser"],
+    "Holiday": ["Train tickets", "Hotel", "Flights"],
+    "Home interior": ["Furniture shop", "Lamp"],
+    "Transport": ["Fuel", "Bus pass", "Parking garage"],
+    "Unbudgeted/misc.": ["Post office", "Repair"],
+    "Clothing": ["Shoes", "Clothes shop"],
+    "Streaming/gaming/etc.": ["Streaming service", "Game"],
+    "Gifts": ["Birthday present", "Flowers"],
+    "Pet care": ["Pet food", "Vet"],
+}
+
+
+def _sheet_months(rng):
+    """Each made-up month's budget and transactions, January to October 2026
+    (October still running on the demo's day), and a November sheet made
+    early, as the household makes them. Returns {period: (budget rows,
+    transactions)} with transactions as (day, description, category, amount,
+    how the category was typed)."""
+    months = {}
+    for m in range(1, 12):
+        period = f"2026-{m:02d}"
+        categories = SHEET_CATEGORIES + ([ADDED_IN_JULY] if m >= 7 else [])
+        budget = []
+        for name, amount in categories:
+            if name == "Groceries" and m >= 4:
+                amount = 520  # raised in April
+            if name == "Holiday" and m >= 5:
+                amount = 300  # and the holiday line in May
+            if name == "Gifts" and m == 2:
+                amount = 0  # nothing set aside: February's gift is unbudgeted
+            budget.append((name, amount))
+        rows = []
+        if period == "2026-11":  # made early: the mortgage copied forward, one gift
+            rows = [(1, "Mortgage", "House payments", 980.0, "House payments"),
+                    (2, "Birthday present", "Gifts", 45.0, "Gifts")]
+            months[period] = (budget, rows)
+            continue
+        for name, amount in budget:
+            if period == "2026-10" and name in ("Home interior", "Gifts", "Pet care", "Clothing"):
+                continue  # nothing recorded yet this month
+            base = amount or 35
+            share = 0.55 if period == "2026-10" else 1.3 if m in (5, 8) else 1.0  # May and August overspent
+            pieces = 1 if base < 100 else int(rng.integers(2, 4))
+            total = base * share * float(rng.normal(1.0, 0.18))
+            if period == "2026-10" and name == "Groceries":
+                total = base * 1.12  # over already
+            for k in range(pieces):
+                words = DESCRIPTIONS[name]
+                rows.append((
+                    int(rng.integers(1, 23 if period == "2026-10" else 28)), words[k % len(words)],
+                    name, round(total / pieces, 2), name,
+                ))
+        if period == "2026-03":  # a category typed with a space: the sheet's sum misses it
+            rows.append((14, "Supermarket", "Groceries", 63.20, "Groceries "))
+        if period == "2026-08":  # a category the summary has no row for
+            rows.append((9, "Parking fine", "Parking", 55.0, "Parking"))
+        months[period] = (budget, rows)
+    return months
+
+
+def _write_sheets(folder, months):
+    """The months as `numbers_source` writes them: three CSVs and the report
+    of the last read."""
+    import csv
+
+    def write(name, fields, rows):
+        with open(folder / name, "w", encoding="utf-8", newline="") as fh:
+            out = csv.DictWriter(fh, fieldnames=fields)
+            out.writeheader()
+            out.writerows(rows)
+
+    tx_rows, budget_rows = [], []
+    for period, (budget, rows) in months.items():
+        year, month = period.split("-")
+        source = f"{year}/{month} {date(int(year), int(month), 1):%B %Y} - Budget.numbers"
+        common = {"source_file": source, "kind": "month", "file_year": year, "file_month": str(int(month))}
+        for day, description, category, amount, typed in rows:
+            tx_rows.append({**common, "date": f"{period}-{day:02d}", "description": description,
+                            "category": typed, "amount": amount})
+        # The summary: what Numbers' SUMIF saved for each row, exact label only.
+        actuals = {}
+        for _, _, category, amount, typed in rows:
+            if typed == category:
+                actuals[category] = round(actuals.get(category, 0.0) + amount, 2)
+        if period == "2026-05":
+            actuals["Health insurance"] = 0.0  # saved without recalculating
+        for name, amount in budget:
+            budget_rows.append({**common, "category": name, "is_total": "False",
+                                "budget": float(amount), "actual": actuals.get(name, 0.0)})
+        budget_rows.append({**common, "category": "Total", "is_total": "True",
+                            "budget": float(sum(a for _, a in budget)),
+                            "actual": round(sum(actuals.get(n, 0.0) for n, _ in budget), 2)})
+    for name, amount in POCKETS.items():
+        budget_rows.append({"source_file": "2026/Budget per Pocket 2026.numbers", "kind": "pocket",
+                            "file_year": "2026", "file_month": "", "category": name,
+                            "is_total": "False", "budget": float(amount), "actual": ""})
+    write("transactions-history.csv",
+          ["source_file", "kind", "file_year", "file_month", "date", "description", "category", "amount"],
+          tx_rows)
+    write("budgets-history.csv",
+          ["source_file", "kind", "file_year", "file_month", "category", "is_total", "budget", "actual"],
+          budget_rows)
+
+    # The savings file: a salary each finished month, and the expenses typed
+    # in by hand, March's before a late correction.
+    savings, running = [], 0.0
+    for period, (_, rows) in sorted(months.items()):
+        if period >= "2026-10":
+            continue
+        salary = 3600.0 if period < "2026-07" else 3750.0
+        spent = round(sum(r[3] for r in rows), 2)
+        typed = round(spent - (85.0 if period == "2026-03" else 0.0))
+        running += salary - typed
+        savings.append({"year": "2026", "month": str(int(period[5:])), "salary": salary,
+                        "expenses_budgeted": "", "expenses_actual_recorded": typed,
+                        "saved_recorded": round(salary - typed, 2), "accumulated_recorded": round(running, 2),
+                        "source_file": "2026/Accumulated savings 2026.numbers"})
+    write("savings-history.csv",
+          ["year", "month", "salary", "expenses_budgeted", "expenses_actual_recorded",
+           "saved_recorded", "accumulated_recorded", "source_file"], savings)
+
+    files = [{"slot": f"month:{p}", "file": f"{p}.numbers", "status": "read",
+              "read_at": "2026-10-23T17:00:04+00:00", "rows": len(r)} for p, (_, r) in months.items()]
+    files.append({"slot": "savings:2025", "file": "2025/Accumulated savings.numbers",
+                  "status": "placeholder", "rows": 0})
+    (folder / "numbers-read.json").write_text(json.dumps({
+        "source": "demo", "files": files, "passed_over": [], "read_at": "2026-10-23T17:00:04+00:00",
+    }), encoding="utf-8")
+
+
+def build_budget(generated_at, rng):
+    """The Budget documents, made by the engine's own `_budget_blocks` from a
+    `Store` reading made-up sheets."""
+    import tempfile
+
+    budget = engine._budget_modules()
+    with tempfile.TemporaryDirectory() as folder:
+        folder = Path(folder)
+        _write_sheets(folder, _sheet_months(rng))
+        store = budget["store_module"].Store(folder)
+        return engine._budget_blocks(
+            budget["analytics"], budget["store_module"], budget["numbers_source"], store,
+            TODAY, generated_at,
+        )
+
+
 # --- the answers ---------------------------------------------------------------
 
 
@@ -652,6 +833,38 @@ def check_shape(documents):
     assert set(worked(real_w)) == set(worked(demo_w)), "a savings window's keys differ"
     first = lambda doc: next(iter(doc["everything"]["windows"].values()))  # noqa: E731
     assert set(first(real_w)) == set(first(demo_w)), "an everything window's keys differ"
+    if not (real / "budget.json").is_file():
+        return
+    real_b, demo_b = load("budget"), documents["budget"]
+    assert set(real_b) == set(demo_b), "budget keys differ from the engine's"
+    for block in ("right_now", "savings", "overview", "forecast", "pockets"):
+        assert set(real_b[block]) == set(demo_b[block]), f"budget {block} keys differ"
+    ok = lambda doc: next(w for w in doc["savings"]["windows"].values() if w["state"] == "ok")  # noqa: E731
+    assert set(ok(real_b)) == set(ok(demo_b)), "a budget savings window's keys differ"
+    year = lambda doc, part: next(iter(doc[part]["by_year"].values()))  # noqa: E731
+    assert set(year(real_b, "forecast")) == set(year(demo_b, "forecast")), "a forecast year's keys differ"
+    assert set(year(real_b, "pockets")) == set(year(demo_b, "pockets")), "a pockets year's keys differ"
+    detail = lambda doc: next(d for y in doc["pockets"]["by_year"].values() for d in y["details"].values())  # noqa: E731
+    assert set(detail(real_b)) == set(detail(demo_b)), "a pocket's keys differ"
+    real_m, demo_m = load("budget-months"), documents["budget-months"]
+    assert set(real_m) == set(demo_m), "budget-months keys differ from the engine's"
+    month = lambda doc: next(m for m in doc["by_month"].values() if not m["empty"])  # noqa: E731
+    assert set(month(real_m)) == set(month(demo_m)), "a month's keys differ"
+
+
+def check_private(text):
+    """Nothing the tracker's code says about the real household may reach the
+    public demo: its own category names (other than the generic ones the
+    made-up sheets borrow) and its old categories' description. Read from the
+    tracker at run time, so this public file names none of them."""
+    engine._budget_modules()  # puts the budget project on the path
+    from finance import categories  # noqa: PLC0415
+
+    used = {name for name, _ in SHEET_CATEGORIES} | {ADDED_IN_JULY[0]}
+    private = [n for n in categories.CANONICAL if n not in used]
+    private.append(categories.LEGACY_SCHEME.description)
+    found = sum(1 for words in private if words in text)
+    assert not found, f"the demo would publish {found} of the household's own words"
 
 
 def main():
@@ -659,6 +872,7 @@ def main():
     documents = build_documents()
     check_shape(documents)
     text = json.dumps(documents, separators=(",", ":"), allow_nan=False)
+    check_private(text)
     (ROOT / "src" / "data" / "demo.js").write_text(
         "// Made-up figures in the engine's exact shape (tools/make_demo.py). Nothing here is real.\n"
         f"export const DEMO = {text};\n", encoding="utf-8", newline="\n",

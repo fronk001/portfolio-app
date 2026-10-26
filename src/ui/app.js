@@ -1,7 +1,8 @@
 // Boot: draw this device's copy of the figures straight away, then let the
 // newest ones arrive in the background. Every screen has an address (#/ the
-// Overview, #/holdings, #/position/<ISIN>, #/cash …, #/wealth, #/savings,
-// #/runway; views.js's SCREENS), so the app comes back where it was left.
+// Overview, #/holdings, #/position/<ISIN>, #/cash …, Budget's #/right-now …
+// #/pockets, Wealth's #/wealth, #/savings, #/runway; views.js's SCREENS), so
+// the app comes back where it was left.
 
 import * as F from '../core/figures.js';
 import { get, load, startSync, subscribe, sync, syncStatus } from '../data/store.js';
@@ -16,14 +17,19 @@ const root = document.getElementById('app');
 // as the Streamlit app's Overview does. Position detail's price chart opens
 // on three months, as the app's does: a week of one share price says little.
 // Wealth's two charts share one window, as in the app, opening on the one
-// the engine names (the app's default, 1Y). `last` is where each of the two
-// facades was left, so the switch at the top goes back there.
+// the engine names (the app's default, 1Y). Budget's Savings opens on the
+// tracker's default window (the last 12 months) and its line year by year,
+// Month on the newest finished month, Forecast and Pockets on the newest
+// year: each null here means "the engine's default". `last` is where each of
+// the three facades was left, so the switch at the top goes back there.
 const ui = {
   range: '1W', metric: 'Value', method: F.TIME, bench: 'S&P 500',
   custom: null, open: null, syncOpen: false,
   posRange: '3M', posCustom: null, cashRecent: false,
   wealthWindow: null, wealthRows: false,
-  last: { portfolio: '#/', wealth: '#/wealth' },
+  budgetWindow: null, budgetLine: 'Year by year', budgetMonth: null, monthTransactions: false,
+  forecastYear: null, pocketYear: null, pocketCategory: null,
+  last: { portfolio: '#/', budget: '#/right-now', wealth: '#/wealth' },
 };
 let chart = null;
 let map = null;
@@ -101,6 +107,8 @@ root.addEventListener('click', (e) => {
     case 'cash-recent': ui.cashRecent = !ui.cashRecent; break;
     case 'wealth-window': ui.wealthWindow = v; break;
     case 'wealth-rows': ui.wealthRows = !ui.wealthRows; break;
+    case 'budget-line': ui.budgetLine = v; break;
+    case 'month-transactions': ui.monthTransactions = !ui.monthTransactions; break;
     case 'sync': ui.syncOpen = !ui.syncOpen; break;
     case 'sign-in': openSignIn(); return;
     case 'sign-out': sync.signOut(); return;
@@ -124,7 +132,14 @@ root.addEventListener('change', (e) => {
     ui.posCustom = null;
     location.hash = `#/position/${encodeURIComponent(e.target.value)}`;
     return; // hashchange draws it
-  } else return;
+  } else if (act === 'budget-window') ui.budgetWindow = e.target.value;
+  else if (act === 'budget-month') ui.budgetMonth = e.target.value;
+  else if (act === 'forecast-year') ui.forecastYear = e.target.value;
+  else if (act === 'pocket-year') {
+    ui.pocketYear = e.target.value;
+    ui.pocketCategory = null; // each year opens on its most used pocket
+  } else if (act === 'pocket-category') ui.pocketCategory = e.target.value;
+  else return;
   render();
 });
 

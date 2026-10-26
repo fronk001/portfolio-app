@@ -92,14 +92,15 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
   display: flex; flex-direction: column; gap: 16px;
 }
 
-/* Portfolio or Wealth, the tracker's facades: in the band at the top, one tap
-   from either to the other, each coming back to the screen it was left on. */
+/* Portfolio, Budget or Wealth, the tracker's facades: in the band at the top,
+   one tap from any to another, each coming back to the screen it was left on.
+   Three fit beside the demo badge on a 375px phone at this padding. */
 .facades {
   position: absolute; z-index: 9; top: calc(var(--safe) + (var(--band) - 40px) / 2); left: var(--edge);
   display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--rest);
 }
 .facades a {
-  min-height: 34px; padding: 0 15px; display: flex; align-items: center; border-radius: 999px;
+  min-height: 34px; padding: 0 12px; display: flex; align-items: center; border-radius: 999px;
   text-decoration: none; font-weight: 600; font-size: 14px; color: var(--neutral-ink);
 }
 .facades a.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(30, 29, 26, 0.12); }
@@ -128,14 +129,15 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
 }
 
 /* Portfolio's eight screens: two rows of four, every one in sight without
-   scrolling sideways. Wealth's three: one row. */
+   scrolling sideways. Budget's six: two rows of three, one row on a wide
+   screen. Wealth's three: one row. */
 .tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 14px; background: var(--rest); }
 .tabs a {
   min-height: 40px; padding: 2px 2px; display: flex; align-items: center; justify-content: center; border-radius: 10px;
   text-decoration: none; font-weight: 600; font-size: 13px; line-height: 1.15; text-align: center; color: var(--neutral-ink);
 }
 .tabs a.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(30, 29, 26, 0.12); }
-.tabs.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tabs.three, .tabs.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .block { display: flex; flex-direction: column; gap: 10px; }
 .block h2, .card-title { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
@@ -166,6 +168,11 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
 .runway { gap: 4px; }
 .runway .headline { font-size: 40px; }
 .runway .lead { font-size: 16px; font-weight: 600; color: var(--neutral-ink); }
+/* A Budget screen's one figure, and what it means in words beneath it. */
+.lead-figure { gap: 2px; }
+.lead-figure .headline { font-size: 40px; }
+.lead-figure .lead { font-size: 15px; font-weight: 600; color: var(--neutral-ink); }
+.muted { color: var(--muted); font-weight: 500; }
 
 .chart { display: flex; flex-direction: column; gap: 6px; }
 .readout { min-height: 40px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -202,6 +209,11 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
 .bar.loss { background: #d03b3b; }
 /* Partly sold and still held: striped, and said in words beside it too. */
 .bar.partly { background-image: repeating-linear-gradient(135deg, rgba(252, 252, 251, 0.75) 0 3px, transparent 3px 7px); }
+/* Budget: the budget as a pale bar beneath what was spent (Right now), or
+   as an orange tick across the bar (Month), as the tracker draws them. */
+.bar.budget { background: rgba(138, 138, 138, 0.30); }
+.bar-track.ticked { overflow: visible; }
+.bar-track .tick { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: #eb6834; }
 .diverging .axis { position: absolute; top: -2px; bottom: -2px; width: 1px; background: #c3c2b7; }
 
 .ranks { list-style: none; display: flex; flex-direction: column; gap: 6px; }
@@ -228,6 +240,8 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
 .asset .n { font-weight: 600; }
 .asset .v { font-family: var(--serif); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .prose { padding: 12px var(--edge); display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; }
+/* A month that differs from its sheet through something to fix in Numbers. */
+.prose.warn { border-left: 4px solid var(--amber); }
 
 .btn.toggle { min-height: 44px; background: var(--rest); color: var(--neutral-ink); font-size: 15px; }
 
@@ -250,6 +264,8 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
 .dtable.num.first-text tr > :first-child { text-align: left; white-space: normal; }
 .dtable.events td:first-child, .dtable.events td:nth-child(3) { white-space: nowrap; }
 .dtable.events tr > :nth-child(3), .dtable.events tr > :nth-child(n+6) { text-align: right; }
+/* Budget's transactions: words, then the amount on the right. */
+.dtable.tx td:nth-child(3), .dtable.tx th:nth-child(3) { text-align: right; white-space: nowrap; }
 /* Columns a phone leaves out, as the Streamlit app does there. */
 @media (max-width: 599px) { .dtable .wide { display: none; } }
 
@@ -300,6 +316,14 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
 .sync-card .t { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
 .sync-card p:not(.t) { font-size: 14px; line-height: 1.45; color: var(--muted); }
 .sync-card p.who { font-size: 13px; }
+/* Beside three facades a phone under 450px wide has room for the dot but not
+   always for the words ("Signed out · Sign in" is 153px), so there the words
+   take a row of their own beneath the switch, and the card opens below them. */
+@media (max-width: 449px) {
+  .page:has(> .sync.says) { padding-top: calc(var(--safe) + var(--band) + 44px); }
+  .page > .sync.says { top: calc(var(--safe) + var(--band) - 2px); }
+  .page > .sync.says ~ .sync-card { top: calc(var(--safe) + var(--band) + 40px); }
+}
 
 .acct { font-size: 13px; color: var(--muted); text-align: center; margin-top: auto; }
 .acct button {
@@ -342,4 +366,5 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
   :root { --band: 56px; --edge: 24px; }
   .hero .big { font-size: 52px; }
   .tabs { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .tabs.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
