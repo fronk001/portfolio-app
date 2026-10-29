@@ -252,6 +252,14 @@ code { font-size: 13px; background: var(--rest); padding: 1px 5px; border-radius
 .rtable tbody th { text-align: left; font-weight: 600; padding-left: var(--edge); }
 .rtable td:last-child { font-weight: 700; padding-right: var(--edge); }
 .rtable tbody tr + tr > * { border-top: 1px solid var(--line-soft); }
+/* Risk: the portfolio's row stands out, not the last column. An index's
+   name and the headings may wrap, and the gaps are narrower, so four figures
+   fit a 375px phone without the table scrolling sideways. */
+.rtable.risk th, .rtable.risk td { padding-left: 5px; padding-right: 5px; }
+.rtable.risk thead th { white-space: normal; }
+.rtable.risk tbody th { white-space: normal; min-width: 6em; padding-left: var(--edge); }
+.rtable.risk td:last-child { font-weight: inherit; padding-right: var(--edge); }
+.rtable.risk tr.mine > * { font-weight: 700; }
 
 /* The other screens' tables: words on the left, figures on the right. */
 .dtable { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }

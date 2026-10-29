@@ -90,6 +90,18 @@ try {
     }
   }
 
+  // Risk, under the chart: the engine's finished figures for each range.
+  const riskText = () => doc().querySelector('.risk-block').textContent;
+  tap('range', '1W');
+  check('Risk over 1W says it needs 3M or longer', /Pick 3M or longer/.test(riskText()));
+  tap('range', '1Y');
+  const oneYear = DEMO.series.risk['1Y'];
+  check('Risk over 1Y leads with the portfolio’s three figures', doc().querySelectorAll('.risk-block .tile').length === 3
+    && riskText().includes(`${oneYear.portfolio.volatility_pct.toFixed(1)}%`));
+  check('and sets each index beside it', doc().querySelectorAll('.risk-block tbody tr').length === 1 + Object.keys(oneYear.benchmarks).length);
+  tap('range', 'All');
+  check('an index whose prices start inside the range is left out, and named', /is left out: its prices here only go back to/.test(riskText()));
+
   tap('metric', 'Return %');
   tap('method', 'Time %');
   tap('range', 'Custom');
@@ -98,6 +110,7 @@ try {
   from.value = '2024-03-01';
   from.dispatchEvent(new Event('change', { bubbles: true }));
   check('a custom range draws, named by its dates', drawn() && /Fri 1 Mar 2024|1 Mar 2024/.test(doc().querySelector('.chart-card').textContent));
+  check('Risk on a custom range points to the tracker', /fixed ranges, 1W to All/.test(riskText()) && doc().querySelector('.risk-block a'));
   tap('method', 'Money %');
   check('Money % on a custom range says why it is not drawn', /fixed ranges/.test(chartOrReason()));
 
@@ -352,6 +365,9 @@ try {
     check(`${screen} says so too`, /next run of the cloud engine/.test(doc().querySelector('.note-card').textContent));
   }
   check('and the top of the Budget', /next run of the cloud engine/.test(doc().querySelector('.hero').textContent));
+  f.contentWindow.location.hash = '#/';
+  await until(() => doc().querySelector('.risk-block'), 'the Overview on older figures');
+  check('and the Overview’s Risk', /Risk comes with the next run of the cloud engine/.test(doc().querySelector('.risk-block').textContent));
 
   // A run that could not work Wealth or the Budget out sends a sentence for
   // each instead; the Portfolio is untouched.

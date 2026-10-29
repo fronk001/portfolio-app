@@ -186,11 +186,15 @@ def build_documents():
     rng = np.random.default_rng(20261026)
     frame = build_series(rng)
     twr = calculations.performance_index(frame, frame["income_eur"])
-    money = {}
+    benchmarks = build_benchmarks(rng, frame.index)
+    closes = {name: pd.Series(v, index=frame.index, dtype=float) for name, v in benchmarks.items()}
+    money, risk = {}, {}
     for choice in engine.FIXED_RANGES:
         window = frame.loc[frame.index >= engine.range_start(choice, frame.index)]
         solved = calculations.money_weighted_series(window, frame["income_eur"].loc[window.index])
         money[choice] = {"from": f"{window.index[0]:%Y-%m-%d}", "values": engine._column(solved, 4)}
+        # the engine's own Risk panel; the indexes' late start leaves them out of All
+        risk[choice] = engine.risk_block(calculations.risk_comparison(twr.loc[window.index], closes))
     generated_at = "2026-10-23T14:15:00+00:00"
     series = {
         "schema_version": engine.SCHEMA_VERSION,
@@ -207,7 +211,8 @@ def build_documents():
             "twr_index": engine._column(twr, 8),
         },
         "money_weighted_pct": money,
-        "benchmarks_eur": build_benchmarks(rng, frame.index),
+        "risk": risk,
+        "benchmarks_eur": benchmarks,
         "benchmark_problems": [],
     }
     main = build_main(frame, twr, generated_at)

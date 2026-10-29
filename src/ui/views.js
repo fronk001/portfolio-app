@@ -23,7 +23,7 @@ import {
 import { source } from '../data/store.js';
 import { accountLine, syncButton } from './account.js';
 import * as B from './budget.js';
-import { CHEVRON, TRACKER_URL, esc, pills, plural, signedClass } from './html.js';
+import { CHEVRON, TRACKER_URL, esc, pills, plural, signedClass, tile } from './html.js';
 import * as S from './screens.js';
 import * as W from './wealth.js';
 
@@ -244,9 +244,65 @@ function overview(d, ui) {
       ${ui.metric === 'Return %' ? `<p class="caption">${METHOD_HELP[ui.method]}</p>` : ''}
       ${notes.map((n) => `<p class="caption">${n}</p>`).join('')}
     </section>
+    ${risk(s, ui)}
     ${quarters(d.main)}`,
     chart: empty ? null : chart,
   };
+}
+
+// The Streamlit Overview's Risk panel: the portfolio's worst fall,
+// volatility and Sharpe ratio over the range, then each index's over the same
+// days. The engine works every fixed range out ahead (calculations.
+// risk_comparison, which the tracker's own panel draws too); nothing is
+// worked out here, so a range of your own links to the tracker.
+const unsignedPct = (v) => (v == null ? '—' : `${v.toFixed(1)}%`);
+const ratio = (v) => (v == null ? '—' : `${v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)}`);
+
+function riskSentence(r) {
+  const p = r.portfolio;
+  const when = !p.trough ? 'It never fell below an earlier high in this range.'
+    : `The worst fall ran from the high of ${shortDate(p.peak)} to the low of ${shortDate(p.trough)}, and ${p.recovered
+      ? `was made good by ${shortDate(p.recovered)}.` : 'has not been made good yet.'}`;
+  const late = Object.entries(r.starts_late || {})
+    .map(([name, first]) => ` ${esc(name)} is left out: its prices here only go back to ${shortDate(first)}.`).join('');
+  return `${when} Every row is measured the same way over the same days, on weekday closes in euros, and the portfolio on the time-weighted index the Time % line draws, so deposits and withdrawals never count as swings.${late}`;
+}
+
+function risk(s, ui) {
+  let body;
+  const r = s.risk && s.risk[ui.range];
+  if (!s.risk) {
+    body = '<p class="caption">Risk comes with the next run of the cloud engine.</p>';
+  } else if (ui.range === F.CUSTOM) {
+    body = `<p class="caption">Risk is worked out ahead for the fixed ranges, 1W to All. For a range of your own, <a href="${TRACKER_URL}" target="_blank" rel="noopener">the full tracker</a> has it.</p>`;
+  } else if (!r) {
+    body = `<p class="caption">Pick 3M or longer to see risk: over ${esc(ui.range)} there are too few days for the swings to mean anything.</p>`;
+  } else {
+    const p = r.portfolio;
+    const row = (name, x, cls = '') => `
+      <tr${cls}><th scope="row">${esc(name)}</th>${x ? `
+        <td ${signedClass(x.return_pct)}>${pct(x.return_pct, 1)}</td><td>${unsignedPct(x.volatility_pct)}</td>
+        <td>${pct(x.max_drawdown_pct, 1)}</td><td>${ratio(x.sharpe)}</td>` : '<td>—</td><td>—</td><td>—</td><td>—</td>'}</tr>`;
+    body = `
+    <div class="tiles three">
+      ${tile('Worst fall', pct(p.max_drawdown_pct, 1))}
+      ${tile('Volatility, a year', unsignedPct(p.volatility_pct))}
+      ${tile('Sharpe ratio', ratio(p.sharpe))}
+    </div>
+    <div class="card table-card">
+      <table class="rtable risk">
+        <thead><tr><th></th><th>Return</th><th>Volatility</th><th>Worst fall</th><th>Sharpe</th></tr></thead>
+        <tbody>${row('Your portfolio', p, ' class="mine"')}${Object.entries(r.benchmarks).map(([name, x]) => row(name, x)).join('')}</tbody>
+      </table>
+    </div>
+    <p class="caption">${riskSentence(r)}</p>
+    <p class="caption">Volatility is how far the value typically moves in a year, up or down. Sharpe is return per unit of swing: above 1 is good, below 0 means the range lost money. Cash counts as earning nothing, the same for every row.</p>`;
+  }
+  return `
+  <section class="block risk-block">
+    <h2>Risk</h2>
+    ${body}
+  </section>`;
 }
 
 const RANGE_WORDS = {

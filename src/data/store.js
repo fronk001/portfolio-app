@@ -6,9 +6,10 @@
 //
 // Dev switches in the URL. None of them touches this device's real copy:
 //   ?demo     made-up figures (tools/make_demo.py)
-//   ?demo=old the same, as an engine from before the other screens, Wealth
-//             and Budget sent them: main and series only (the smoke test
-//             checks the sentences)
+//   ?demo=old the same, as an engine from before the other screens, Wealth,
+//             Budget and the Overview's Risk sent them: main and series
+//             only, the series without risk (the smoke test checks the
+//             sentences)
 //   ?demo=problem  the same, as a run that could not work Wealth and the
 //             Budget out and sent a sentence for each
 //   ?local    the tracker's own figures on this laptop, as its engine last
@@ -86,7 +87,8 @@ export async function load() {
   if (source === 'demo') {
     const { DEMO } = await import('./demo.js');
     const kind = params.get('demo');
-    accept(kind === 'old' ? { main: DEMO.main, series: DEMO.series } : kind === 'problem' ? withProblems(DEMO) : DEMO);
+    const { risk, ...olderSeries } = DEMO.series;
+    accept(kind === 'old' ? { main: DEMO.main, series: olderSeries } : kind === 'problem' ? withProblems(DEMO) : DEMO);
     return emit();
   }
   if (source === 'local') {

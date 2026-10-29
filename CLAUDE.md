@@ -51,6 +51,11 @@ Single user, non-technical: explain things plainly, in prose.
   `/life-hub/portfolio/` forwards here, so a shortcut added from it lands
   here too. This app's own icon is still the better one (full screen, its
   own sign-in kept), as section 3 of SETUP.md says.
+- ✅ Built 29 Oct 2026: **Risk** on the Overview, under the chart (worst
+  fall, volatility, Sharpe ratio, each index beside the portfolio), from the
+  engine's `series.risk[range]`; nothing worked out here. Too short a range,
+  Custom (links to the tracker) and figures from before the engine sent it
+  (`?demo=old`) each say so in a sentence; the smoke test checks all three.
 - Not built: Money % against a benchmark (the engine would have to solve it;
   the screen says so), a Wealth window of your own (Custom: too many to work
   out ahead; each screen links to the tracker's). Log a trade, imports, the
